@@ -120,12 +120,27 @@
 						</td>
 					</tr>
 					<tr>
+						<td>Hold</td>
+						<td>toggle</td>
+						<td>off</td>
+						<td class="desc">
+							Full mosh for exactly as long as it is on, ignoring <strong>Burst
+							Length</strong> entirely. Play it like a key.
+							<span class="how">Map it to a key or MIDI note and tick
+							<strong>Piano</strong> in the shortcut &mdash; that is what makes
+							it momentary. As a panel toggle it latches, because you cannot
+							hold a checkbox down with a mouse.</span>
+						</td>
+					</tr>
+					<tr>
 						<td>Reset</td>
 						<td>button</td>
 						<td>&mdash;</td>
 						<td class="desc">
 							Forces a keyframe: snaps back to the clean input immediately and
-							clears any running burst. The panic button.
+							clears any running burst. The panic button &mdash; it also ends a
+							<strong>Hold</strong> that is still reading on, which is the way
+							out if a key-up is ever lost.
 						</td>
 					</tr>
 					<tr>

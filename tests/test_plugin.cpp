@@ -279,6 +279,80 @@ TEST( TimeBankedByGatedCallsIsNotLost )
 	host.Teardown();
 }
 
+TEST( HoldIsNotConsumedTheWayATriggerIs )
+{
+	// Hold has to survive what Trigger deliberately does not. consumeAllTrigger()
+	// zeroes every ParamTrigger after each rendered frame, which is exactly why
+	// hold is a ParamBool: an event cannot express a state that outlives a
+	// frame. If someone "tidies" it into a ParamTrigger, this fails on frame two.
+	Host host;
+	CHECK( host.Setup( FRAME_WIDTH, FRAME_HEIGHT, 1 ) );
+
+	TestableEffect plugin;
+	const FFGLViewportStruct viewport = host.Viewport();
+	CHECK( plugin.InitGL( &viewport ) == FF_SUCCESS );
+
+	const unsigned int holdIndex = plugin.ParamIndex( "Hold" );
+	CHECK( holdIndex != TestableEffect::NO_PARAM );
+
+	// Through the host's setter, once, as a host would on a key-down.
+	plugin.SetFloatParameter( holdIndex, 1.0f );
+
+	for( int frame = 1; frame <= 5; ++frame )
+	{
+		plugin.SetTime( frame );
+		ProcessOpenGLStruct pGL = host.Frame();
+		plugin.ProcessOpenGL( &pGL );
+		CHECK( plugin.ReadParams().hold );
+	}
+
+	// And it must clear on the way back down — a hold that cannot be released
+	// is worse than one that never engaged.
+	plugin.SetFloatParameter( holdIndex, 0.0f );
+	plugin.SetTime( 6.0 );
+	ProcessOpenGLStruct pGL = host.Frame();
+	plugin.ProcessOpenGL( &pGL );
+	CHECK( !plugin.ReadParams().hold );
+
+	plugin.DeInitGL();
+	host.Teardown();
+}
+
+TEST( ResetEndsAHoldWhoseReleaseNeverArrived )
+{
+	// The recovery that matters. Hold is the only state in this plugin that
+	// cannot expire on its own, so if a key-up is lost — focus moved to another
+	// application mid-hold, a dropped MIDI note-off — the operator is stranded
+	// with the output destroyed. Reset has to end it while the parameter is
+	// still reading true, and the shader alone cannot do that: it zeroes the
+	// level, and the still-true hold puts it straight back the next frame.
+	TestableEffect plugin;
+
+	const unsigned int holdIndex  = plugin.ParamIndex( "Hold" );
+	const unsigned int resetIndex = plugin.ParamIndex( "Reset" );
+	CHECK( holdIndex != TestableEffect::NO_PARAM );
+	CHECK( resetIndex != TestableEffect::NO_PARAM );
+
+	plugin.SetFloatParameter( holdIndex, 1.0f );
+	CHECK( plugin.ReadParams().hold );
+
+	// Reset, with the hold still physically down.
+	plugin.SetFloatParameter( resetIndex, 1.0f );
+	CHECK( !plugin.ReadParams().hold );
+
+	// And it stays ended for as long as the stuck hold reads true, rather than
+	// blinking off for a frame and coming back.
+	plugin.SetFloatParameter( resetIndex, 0.0f );
+	for( int frame = 0; frame < 5; ++frame )
+		CHECK( !plugin.ReadParams().hold );
+
+	// A genuine release re-arms it, so the next press works normally.
+	plugin.SetFloatParameter( holdIndex, 0.0f );
+	CHECK( !plugin.ReadParams().hold );
+	plugin.SetFloatParameter( holdIndex, 1.0f );
+	CHECK( plugin.ReadParams().hold );
+}
+
 TEST( TriggerSurvivesAGatedCall )
 {
 	Host host;

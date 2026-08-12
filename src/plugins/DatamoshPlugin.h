@@ -107,6 +107,12 @@ protected:
 	/// Their values as of the last ApplyStyle, in the same order.
 	std::vector< float >        styleSnapshot;
 
+	/// Set when Reset lands while Hold is still down, so Reset can end a hold
+	/// whose release never arrived. Cleared by a genuine release. Mutable
+	/// because ReadParams is the one place parameters are derived, and putting
+	/// half of this rule somewhere else would be worse than the qualifier.
+	mutable bool holdSuppressed = false;
+
 	double lastHostTime  = 0.0;
 	bool   hostTimeValid = false;
 	int    frameCounter  = 0;
@@ -162,6 +168,12 @@ void DatamoshPlugin< HostBase >::DeclareCommonParams()
 	                                         0 ) );
 	AddGrouped( "Mosh", ParamRange::Create( "Mosh Amount", 0.0f, Range( 0.0f, 1.0f ) ) );
 	AddGrouped( "Mosh", ParamTrigger::Create( "Trigger" ) );
+	// Played rather than fired. A boolean, not a ParamTrigger, for two reasons:
+	// consumeAllTrigger() zeroes every ParamTrigger after each rendered frame,
+	// so an event can never express a state that lasts longer than a frame; and
+	// a boolean is what Resolume's shortcut system can map in its momentary
+	// "piano" style, which is how an operator actually holds one down.
+	AddGrouped( "Mosh", ParamBool::Create( "Hold", false ) );
 	AddGrouped( "Mosh", ParamTrigger::Create( "Reset" ) );
 	AddGrouped( "Mosh", ParamOption::Create( "Auto Mode",
 	                                         { { "Manual", 0.0f }, { "On Cut", 1.0f }, { "On Beat", 2.0f } },
@@ -447,6 +459,21 @@ MoshParams DatamoshPlugin< HostBase >::ReadParams() const
 	params.moshAmount  = ParamValue( "Mosh Amount" );
 	params.trigger     = ParamValue( "Trigger" ) > 0.5f;
 	params.reset       = ParamValue( "Reset" ) > 0.5f;
+
+	// Reset outranks a hold that is still down. The shader zeroes the mosh level
+	// when Reset arrives, but a hold reading true puts it straight back on the
+	// next frame, so on its own Reset is a one-frame blink rather than a way
+	// out. That matters because a hold is the only state here that cannot
+	// expire by itself: if a key-up is ever lost — focus moved to another
+	// application mid-hold, a MIDI note-off dropped — the operator needs one
+	// gesture that ends it. The latch clears on a genuine release, so the next
+	// press behaves normally.
+	const bool holdDown = ParamValue( "Hold" ) > 0.5f;
+	if( !holdDown )
+		holdSuppressed = false;
+	else if( params.reset )
+		holdSuppressed = true;
+	params.hold        = holdDown && !holdSuppressed;
 	params.autoMode    = static_cast< AutoMode >( OptionValue( "Auto Mode" ) );
 	params.sensitivity = ParamValue( "Cut Sensitivity" );
 	params.duration    = ParamValue( "Burst Length" );

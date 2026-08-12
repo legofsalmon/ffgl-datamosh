@@ -137,6 +137,44 @@ Chroma Drift     0.4</code></pre>
 
 			<h2 id="workflows">Live workflows</h2>
 
+			<h3>Playing it like a key</h3>
+			<p>
+				<strong>Hold</strong> keeps full mosh up for exactly as long as it is on and
+				ignores <strong>Burst Length</strong> altogether, so it is the control to
+				play in time with the music rather than fire and wait out.
+			</p>
+			<ol class="prose-list">
+				<li>Leave <strong>Mosh Amount</strong> at 0, so there is somewhere to go.</li>
+				<li>Right-click <strong>Hold</strong> and assign it to a key or a MIDI note.</li>
+				<li>In the shortcut, tick <strong>Piano</strong>. That is the part that
+					matters: Piano is what makes a shortcut momentary, and it is a property
+					of the shortcut rather than of the parameter.</li>
+			</ol>
+			<div class="note accent">
+				<span class="note-label">The bit that catches people</span>
+				If your pad sends <strong>CC</strong> rather than <strong>Note</strong>, the
+				Piano option does not appear at all. Change the shortcut's Mode to
+				<strong>Button</strong> and it comes back.
+			</div>
+			<p>
+				Without a mapping there is no held gesture to make &mdash; the panel control
+				is a toggle, and a mouse cannot hold a checkbox down. Piano also has an
+				<strong>Invert</strong> option, which gives you the opposite instrument for
+				free: moshing all the time, and the key punches a clean hole in it.
+			</p>
+			<div class="note warn">
+				<span class="note-label">If pressing it does nothing</span>
+				Check <strong>Mosh Amount</strong> is not already at 1. Hold and Amount feed
+				the same gate, so at full Amount there is nothing left to add &mdash; and
+				every <strong>Style</strong> preset sets Amount to 1 when you pick it. Drop
+				it back to 0 after selecting a style if you intend to play the mosh by hand.
+			</div>
+			<p>
+				<strong>Reset</strong> ends a hold even while the control still reads on, so
+				if a key-up ever goes missing &mdash; you alt-tabbed mid-hold, a note-off got
+				dropped &mdash; that is the one gesture that gets the picture back.
+			</p>
+
 			<h3>Auto-melt every cut, hands off</h3>
 			<p>
 				The setup worth doing first, because it needs nothing from you once it is
@@ -164,7 +202,7 @@ Chroma Drift     0.4</code></pre>
 			</p>
 			<ol class="prose-list">
 				<li>Put the clip you want the <em>movement</em> from on the upper layer.</li>
-				<li>Set that layer's <strong>blend mode</strong> to <strong>Datamosh
+				<li>Set that layer's <strong>blend mode</strong> to <strong>Mosh
 					Transplant</strong>. It is in the blend-mode dropdown, not the effects
 					list.</li>
 				<li>Leave <strong>Motion Source</strong> on <strong>This Layer</strong>. The

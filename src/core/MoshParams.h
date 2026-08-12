@@ -38,6 +38,11 @@ struct MoshParams
 	float    moshAmount = 0.0f;
 	/// One-shot: start a timed mosh burst this frame.
 	bool     trigger    = false;
+	/// Played like a key: the mosh is held for exactly as long as this is true,
+	/// with no reference to `duration`. Releasing it falls through the same
+	/// ramp a burst does. Unlike `trigger` this is a level, not an edge, so a
+	/// dropped release leaves the effect on — `reset` clears it.
+	bool     hold       = false;
 	/// One-shot: force a keyframe, snapping back to the clean input.
 	bool     reset      = false;
 	AutoMode autoMode   = AutoMode::Manual;

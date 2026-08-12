@@ -415,6 +415,132 @@ TEST( TriggerRaisesAndReleases )
 	rig.Teardown();
 }
 
+TEST( HoldStaysUpForAsLongAsItIsHeld )
+{
+	// The whole point of hold as against trigger: it outlives Burst Length. With
+	// a burst of 0.1s, sixty frames at 1/60 is six times the burst, so anything
+	// still up at the end is up because hold held it.
+	Rig rig;
+	CHECK( rig.Setup( 128, 128 ) );
+
+	MoshParams params = RawEstimatorParams();
+	params.duration   = 0.1f;
+	params.deltaTime  = 1.0f / 60.0f;
+
+	rig.PushShifted( 0.0f, 0.0f, params, 0 );
+	rig.PushShifted( 2.0f, 0.0f, params, 1 );
+
+	params.hold = true;
+	for( int frame = 2; frame < 62; ++frame )
+	{
+		rig.PushShifted( static_cast< float >( frame * 2 ), 0.0f, params, frame );
+		// Not just at the end — at every frame, so a hold that decays slowly
+		// enough to still read as up on the last frame cannot pass.
+		CHECK( ReadTarget( rig.pipeline.GetControlState() )[ 0 ] > 0.9f );
+	}
+
+	rig.Teardown();
+}
+
+TEST( HoldReleasesWhenItIsLetGo )
+{
+	// The failure that matters. Hold is a level, not an edge, so a bug that
+	// latches it leaves the effect stuck on — which on stage is unrecoverable
+	// without pulling the effect off the layer.
+	Rig rig;
+	CHECK( rig.Setup( 128, 128 ) );
+
+	MoshParams params = RawEstimatorParams();
+	params.duration   = 0.1f;
+	params.deltaTime  = 1.0f / 60.0f;
+
+	rig.PushShifted( 0.0f, 0.0f, params, 0 );
+	rig.PushShifted( 2.0f, 0.0f, params, 1 );
+
+	params.hold = true;
+	for( int frame = 2; frame < 20; ++frame )
+		rig.PushShifted( static_cast< float >( frame * 2 ), 0.0f, params, frame );
+	CHECK( ReadTarget( rig.pipeline.GetControlState() )[ 0 ] > 0.9f );
+
+	// Let go. Only the 0.25s release ramp should remain — no burst was ever
+	// started, so Burst Length must not extend this.
+	params.hold = false;
+	for( int frame = 20; frame < 60; ++frame )
+		rig.PushShifted( static_cast< float >( frame * 2 ), 0.0f, params, frame );
+
+	CHECK_NEAR( ReadTarget( rig.pipeline.GetControlState() )[ 0 ], 0.0, 1e-3 );
+
+	rig.Teardown();
+}
+
+TEST( ResetClearsAHeldMosh )
+{
+	// The escape hatch. If a release is ever dropped — a lost MIDI note-off, a
+	// window focus change mid-hold — Reset has to get the picture back even
+	// while hold is still reading true. Without this, recovery means removing
+	// the effect.
+	Rig rig;
+	CHECK( rig.Setup( 128, 128 ) );
+
+	MoshParams params = RawEstimatorParams();
+	params.deltaTime  = 1.0f / 60.0f;
+
+	rig.PushShifted( 0.0f, 0.0f, params, 0 );
+	rig.PushShifted( 2.0f, 0.0f, params, 1 );
+
+	params.hold = true;
+	for( int frame = 2; frame < 20; ++frame )
+		rig.PushShifted( static_cast< float >( frame * 2 ), 0.0f, params, frame );
+	CHECK( ReadTarget( rig.pipeline.GetControlState() )[ 0 ] > 0.9f );
+
+	// Reset while hold is still down.
+	params.reset = true;
+	rig.PushShifted( 40.0f, 0.0f, params, 20 );
+
+	CHECK_NEAR( ReadTarget( rig.pipeline.GetControlState() )[ 0 ], 0.0, 1e-3 );
+
+	rig.Teardown();
+}
+
+TEST( ReleasingHoldEndsTheMoshEvenOverARunningBurst )
+{
+	// Release has to mean release. A hold takes ownership of the level while it
+	// is down, so no automatic burst is left running underneath it — otherwise
+	// letting go changes nothing visible and reads as a control that has stuck
+	// on. This is the On Beat case: at 128bpm the bursts refire every 469ms
+	// while Burst Length defaults to a second, so the level would otherwise be
+	// pinned continuously and the release invisible.
+	Rig rig;
+	CHECK( rig.Setup( 128, 128 ) );
+
+	MoshParams params = RawEstimatorParams();
+	params.duration   = 1.0f;          // a burst far longer than the hold
+	params.deltaTime  = 1.0f / 60.0f;
+
+	rig.PushShifted( 0.0f, 0.0f, params, 0 );
+	rig.PushShifted( 2.0f, 0.0f, params, 1 );
+
+	// Fire a one-second burst, then hold and release well inside it.
+	params.trigger = true;
+	rig.PushShifted( 4.0f, 0.0f, params, 2 );
+	params.trigger = false;
+
+	params.hold = true;
+	for( int frame = 3; frame < 10; ++frame )
+		rig.PushShifted( static_cast< float >( frame * 2 ), 0.0f, params, frame );
+	CHECK( ReadTarget( rig.pipeline.GetControlState() )[ 0 ] > 0.9f );
+
+	params.hold = false;
+	for( int frame = 10; frame < 40; ++frame )
+		rig.PushShifted( static_cast< float >( frame * 2 ), 0.0f, params, frame );
+
+	// Only ~0.13s of the burst had elapsed, so without hold taking ownership
+	// this would still be pinned at 1.0.
+	CHECK_NEAR( ReadTarget( rig.pipeline.GetControlState() )[ 0 ], 0.0, 1e-3 );
+
+	rig.Teardown();
+}
+
 TEST( BeatDivisorFiresAtTheRequestedInterval )
 {
 	// The host only reports position within the current bar. Deriving beat edges
