@@ -123,6 +123,12 @@ Do **not** run `codesign` to sign anything. The arm64 slices already carry a
 linker ad-hoc signature (`flags=0x20002`), which is sufficient for `dlopen`; the
 x86_64 slice is unsigned and that is also normal.
 
+**Do not go looking for "Open Anyway".** On macOS 15+ that button lives in System
+Settings → Privacy & Security and is the documented route for unsigned
+*applications*. A plugin bundle `dlopen`ed by a host never triggers that dialog,
+so there is no button to press. Removing the quarantine attribute is the only
+route for an FFGL bundle.
+
 **Windows** (PowerShell)
 
 ```powershell
@@ -311,11 +317,20 @@ prints the verdict.
 | Scan line, no error at all | Ambiguous. Check the collector's `plugMain` export probe — the other historical failure was a binary with no entry point, because `plugMain` lived in a translation unit nothing referenced and the linker discarded it. |
 | Nothing at all, Resolume < 7.3.1 | The plugin log channel may not be picked up at all. Score UNAVAILABLE. |
 
-Log locations: macOS `~/Library/Logs/Resolume Arena/`, Windows
-`%LOCALAPPDATA%\Resolume Arena\` **or** `%APPDATA%\Resolume Arena\` — both appear
-in official docs, from different revisions, so check both. The exact filename
-isn't documented consistently; open the newest file in the folder, or use
-Preferences → Feedback → View Log.
+**The easiest way to open the log is from inside Resolume: Preferences →
+Feedback → View Log.** That avoids the path question entirely, and it is the
+route Resolume's own FFGL documentation uses.
+
+If you want the file itself: macOS `~/Library/Logs/Resolume Arena/`, Windows
+`%LOCALAPPDATA%\Resolume Arena\`. Forum posts naming `%APPDATA%` (Roaming) are
+outdated for v7 — the collector checks both anyway, since checking only one and
+finding nothing is indistinguishable from there being no log. The filename is not
+documented consistently, so open the newest file in the folder.
+
+**Resolume's UI tells you nothing when a plugin fails to load** — no
+notification, no badge, no dialog. "Never looked in that folder" and "looked,
+loaded it, and rejected it" present identically: the effect is simply absent. The
+log is the only thing that separates them, which is why this section exists.
 
 ## F2. The buffers line — anchored, so a stale line can't pass
 
@@ -355,6 +370,25 @@ shader-error `printf` reaches a console:
 
 Only worth starting once the smoke test is green. Roughly four hours end to end;
 each phase is independently useful, so stop wherever you run out of time.
+
+### What needs which Resolume version
+
+From FFGL.h's own changelog, so a missing feature can be told apart from a bug:
+
+| Feature | Needs |
+| --- | --- |
+| Parameter groups (`SetParamGroup`) — collapsible sections | 7.3.0 |
+| Plugin logging into the host log (our `datamosh:` lines) | 7.3.1 |
+| Parameter display names | 7.4.0 |
+| REST API and WebSocket API | 7.8 |
+| Native Apple Silicon | 7.11 |
+| Bundled MCP servers; monitor snapshot endpoints | 7.26 |
+
+On anything below 7.3, parameters still work but appear as one flat list — that
+is the host, not us. Below 7.3.1 there will be no `datamosh:` lines in the log no
+matter what happens, so score that channel UNAVAILABLE rather than FAILED.
+
+### The phases
 
 **Phase A — the parameter contract (~30 min).** A failure here means every number
 you read later isn't the number the plugin received, so run it before any sweep.

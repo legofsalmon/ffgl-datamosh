@@ -75,7 +75,10 @@ Beat sync via Resolume's clock, and audio-reactive triggering via FFT.
 
 ## Known gaps
 
-- Not yet validated in Resolume; see the checklist in the README.
+- Not yet validated in Resolume. [VALIDATING.md](https://github.com/legofsalmon/ffgl-datamosh/blob/main/VALIDATING.md)
+  is the procedure — a ten-minute smoke test and a triage table — and
+  `tools/collect-datamosh-diagnostics.{sh,ps1}` gathers the evidence. Reports
+  welcome.
 - macOS bundles are unsigned and unnotarised.
 - The mixer carries an inherited `mixVal` slider that does nothing — use its own
   **Mix** parameter. It cannot be renamed away without making the plugin
