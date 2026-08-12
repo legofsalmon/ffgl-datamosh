@@ -55,6 +55,7 @@ Status
 ------
 
 This is a pre-release. Everything in it is verified by an automated test suite
-against synthetic footage, but it has not yet been run inside Resolume itself,
-and the tuning defaults have never seen real video. Treat it as something to
+against synthetic footage, and it now loads and runs in Resolume -- the smoke
+test passes on a real host. The rest of the pass has not been done, and the
+tuning defaults have never been judged against real footage. Treat it as something to
 try, not something to put in a show without rehearsing it first.

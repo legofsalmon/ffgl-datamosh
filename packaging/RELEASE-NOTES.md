@@ -11,13 +11,20 @@ Two FFGL plugins that simulate datamoshing in Resolume, over a shared render cor
 
 ## This is a pre-release — read this first
 
-Everything here is verified by an automated test suite: 34 tests running a real
+Everything here is verified by an automated test suite: 40 tests running a real
 headless OpenGL 4.1 context against synthetic footage with known ground truth,
 green on Linux, Windows and macOS.
 
-**None of it has been run inside Resolume.** The tuning defaults have never seen
-real video. Treat this as something to try and report back on, not something to
-put in a show without rehearsing first.
+**It now loads and runs in Resolume.** The smoke test passed on a real host:
+both plugins register and instantiate, the effect renders, Resolume delivers
+parameter writes, the motion estimator is genuinely running, and wide-range
+parameters arrive at their real values rather than normalised.
+
+What has *not* been done is the rest of the pass — the aesthetic sweeps, a
+30-minute soak, GL-state hygiene in a chain, and the mixer beyond instantiation.
+The tuning defaults have still never been judged against real footage. Treat
+this as something to try and report back on, not something to put in a show
+without rehearsing first.
 
 ## Install
 
@@ -75,10 +82,14 @@ Beat sync via Resolume's clock, and audio-reactive triggering via FFT.
 
 ## Known gaps
 
-- Not yet validated in Resolume. [VALIDATING.md](https://github.com/legofsalmon/ffgl-datamosh/blob/main/VALIDATING.md)
-  is the procedure — a ten-minute smoke test and a triage table — and
-  `tools/collect-datamosh-diagnostics.{sh,ps1}` gathers the evidence. Reports
-  welcome.
+- Only the smoke test has been run against a real Resolume. The full pass —
+  aesthetic sweeps, soak, GL hygiene, the mixer — has not.
+  [VALIDATING.md](https://github.com/legofsalmon/ffgl-datamosh/blob/main/VALIDATING.md)
+  is the procedure and `tools/collect-datamosh-diagnostics.{sh,ps1}` gathers the
+  evidence. Reports welcome.
+- **Hold** needs a key or MIDI mapping with Resolume's **Piano** option ticked
+  to be a held control at all; the panel toggle latches, because a mouse cannot
+  hold a checkbox down.
 - macOS bundles are unsigned and unnotarised.
 - The mixer carries an inherited `mixVal` slider that does nothing — use its own
   **Mix** parameter. It cannot be renamed away without making the plugin
