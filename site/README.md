@@ -20,6 +20,20 @@ sitemap.xml
 tools/make-og.py    regenerates og.png
 ```
 
+## The palette
+
+One palette, dark, declared on bare `:root` in `style.css`. The site does not
+follow the operating system's light/dark setting, and there is no toggle.
+
+Everything downstream reads tokens — there is not a single colour literal in the
+stylesheet outside that block, and `demo.js` samples `--surface-sunk`, `--ink`
+and `--accent` off the root element rather than carrying its own. Retinting the
+site is editing eleven lines in one place.
+
+Two things carry fixed colours on purpose: `favicon.svg`, because it is
+composited against browser chrome nobody controls, and `og.png`, because it is
+an image. Both are already built on the same dark ground.
+
 ## Vercel settings
 
 | Setting | Value |
