@@ -1,0 +1,125 @@
+name: build
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  # Resolume never runs on Linux, but the tests do. Mesa's software rasteriser
+  # gives a real OpenGL 4.1 core context with no GPU, so the estimator gets
+  # checked against known-answer inputs on every commit.
+  test:
+    name: test (linux, software GL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install OpenGL development packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libglew-dev libgl1-mesa-dev libegl1-mesa-dev
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      # plugMain is the only symbol a host looks up, and it lives in a
+      # translation unit nothing else references. If the SDK ever goes back to
+      # being linked as a static archive the linker will silently drop it and
+      # produce plugins that load nowhere, with no other symptom.
+      - name: Verify the plugin entry point is exported
+        run: |
+          for plugin in build/src/plugins/*.so; do
+            echo "== $plugin"
+            nm -D --defined-only "$plugin" | grep -qw plugMain
+          done
+
+  windows:
+    name: plugins (windows)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # GLEW ships prebuilt in the FFGL SDK for x64, so there is no package
+      # manager in the loop.
+      - name: Configure
+        run: cmake -S . -B build -A x64 -DDATAMOSH_BUILD_TESTS=OFF
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Verify the plugin entry point is exported
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          # vswhere ships with every Visual Studio installer and is at a fixed
+          # path, so this stays a bounded lookup. Searching Program Files
+          # recursively for dumpbin.exe instead takes many minutes.
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vsPath  = & $vswhere -latest -products * -property installationPath
+          $dumpbin = Get-ChildItem "$vsPath\VC\Tools\MSVC\*\bin\Hostx64\x64\dumpbin.exe" |
+                     Select-Object -First 1 -ExpandProperty FullName
+          if (-not $dumpbin) { throw "could not locate dumpbin.exe" }
+          Write-Host "using $dumpbin"
+
+          Get-ChildItem build/src/plugins/Release/*.dll | ForEach-Object {
+            Write-Host "== $($_.Name)"
+            $exports = & $dumpbin /exports $_.FullName
+            if (-not ($exports -match 'plugMain')) { throw "plugMain not exported from $($_.Name)" }
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: datamosh-windows
+          path: build/src/plugins/Release/*.dll
+          if-no-files-found: error
+
+  macos:
+    name: plugins (macos universal)
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # Resolume 7.11+ runs natively on Apple Silicon and cannot load an
+      # x86_64-only plugin, so both slices ship in one bundle.
+      - name: Configure
+        run: >
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+          -DDATAMOSH_BUILD_TESTS=OFF
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Verify both architectures are present
+        run: |
+          for bundle in build/src/plugins/*.bundle; do
+            binary="$bundle/Contents/MacOS/$(basename "$bundle" .bundle)"
+            echo "== $binary"
+            lipo -archs "$binary"
+            lipo -archs "$binary" | grep -q arm64
+            lipo -archs "$binary" | grep -q x86_64
+            nm -gU "$binary" | grep -qw _plugMain
+          done
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: datamosh-macos
+          path: build/src/plugins/*.bundle
+          if-no-files-found: error
