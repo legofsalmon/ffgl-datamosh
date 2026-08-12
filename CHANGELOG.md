@@ -6,7 +6,13 @@ Notable changes to ffgl-datamosh. Format follows
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **MIT licence.** Until now the project had none, which legally meant all
+  rights reserved — nobody could redistribute or modify it. `LICENSE` is copied
+  into every release archive by the release workflow, so the next version is the
+  first whose downloads carry it.
+
 
 ## [0.1.2] — 2026-08-12
 

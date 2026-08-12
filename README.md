@@ -118,8 +118,9 @@ actual host. The checklist that still needs a machine with Resolume on it:
 
 ## Licence
 
-Not yet chosen — which currently means all rights reserved, so nobody can
-legally redistribute or modify it. Worth deciding before promoting the release.
+[MIT](LICENSE). Use it, change it, ship it in something commercial — keep the
+copyright notice with it and accept that it comes with no warranty.
 
-The plugins link the FFGL SDK and (on Windows) GLEW, both BSD-style; their
-notices are generated into a `THIRD-PARTY.txt` inside every release archive.
+The plugins link the FFGL SDK and (on Windows) GLEW, both BSD-style and both
+compatible; their notices are generated into a `THIRD-PARTY.txt` inside every
+release archive alongside a copy of `LICENSE`.
