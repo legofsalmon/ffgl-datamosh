@@ -122,6 +122,18 @@ main {
 
 .prose { max-width: var(--measure); }
 
+/* Reference tables carry four columns of detail and do not fit the prose
+ * measure. On table-heavy pages the container opens to the full content column
+ * while the running text keeps its own measure — otherwise every table has to
+ * be scrolled sideways to read the column that matters. */
+.prose.wide { max-width: none; }
+.prose.wide > p,
+.prose.wide > .lede,
+.prose.wide > ul,
+.prose.wide > ol,
+.prose.wide > pre,
+.prose.wide > .note { max-width: var(--measure); }
+
 .prose > * + * { margin-block-start: 1.1em; }
 .prose > h2 { margin-block-start: 2.4em; }
 .prose > h3 { margin-block-start: 1.9em; }

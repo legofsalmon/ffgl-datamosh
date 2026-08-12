@@ -47,9 +47,11 @@
 				<canvas id="demo" width="880" height="300" role="img"
 				        aria-label="Animation of a moving pattern being displaced in macroblocks, the top half refreshing normally while the bottom half smears along held motion vectors."></canvas>
 				<p class="hero-caption">
-					Live, in your browser: the same loop the plugin runs. Above the line
-					pixels refresh from the source; below it they are only ever displaced
-					along the estimated motion. That single difference is the whole effect.
+					Live, in your browser: the same loop the plugin runs. While a burst is
+					running, pixels above the line refresh from the source and pixels below
+					it are only ever displaced along the estimated motion. That single
+					difference is the whole effect. Every few seconds a keyframe lands and
+					the image snaps back — which is what a triggered burst looks like.
 				</p>
 			</div>
 
@@ -264,8 +266,15 @@ xattr -dr com.apple.quarantine ~/Documents/Resolume\ Arena/Extra\ Effects/Datamo
 	var time = 0;
 	var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+	/* Left to run, the accumulation collapses into mush and stays there. Real
+	 * use is a cycle: a burst, then a keyframe that snaps back to clean. This
+	 * mirrors what a triggered burst looks like, and keeps the demo watchable. */
+	var CYCLE = 7.5, BURST = 5.0;
+
 	function step() {
 		time += 1 / 60;
+		var phase = time % CYCLE;
+		var moshing = phase < BURST;
 		drawSource(time);
 
 		/* Displace the accumulated image block by block. drawImage from the
@@ -278,8 +287,8 @@ xattr -dr com.apple.quarantine ~/Documents/Resolume\ Arena/Extra\ Effects/Datamo
 		for (var row = 0; row < ROWS; row++) {
 			for (var col = 0; col < COLS; col++) {
 				var x = col * BLOCK, y = row * BLOCK;
-				if (row < FRONT) {
-					// Above the front: refresh from the live source.
+				if (row < FRONT || !moshing) {
+					// Above the front, or between bursts: refresh from the source.
 					ctx.drawImage(source, x, y, BLOCK, BLOCK, x, y, BLOCK, BLOCK);
 				} else {
 					// Below it: carry the old pixels along the motion vector.
@@ -289,9 +298,11 @@ xattr -dr com.apple.quarantine ~/Documents/Resolume\ Arena/Extra\ Effects/Datamo
 			}
 		}
 
-		// The line where refreshing stops.
-		ctx.fillStyle = colours.accent;
-		ctx.fillRect(0, FRONT * BLOCK - 1, W, 1.5);
+		// The line where refreshing stops, shown only while a burst is running.
+		if (moshing) {
+			ctx.fillStyle = colours.accent;
+			ctx.fillRect(0, FRONT * BLOCK - 1, W, 1.5);
+		}
 
 		if (!reduce) requestAnimationFrame(step);
 	}
