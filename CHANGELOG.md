@@ -6,8 +6,46 @@ Notable changes to ffgl-datamosh. Format follows
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.1.3] — 2026-08-12
+
+### Fixed
+
+- **The audio parameters did nothing whatsoever.** `ffglqs::Audio` computes every
+  FFT bin as `fft[i] * fft[i] * gain`, and `gain` initialises to `0`. Nothing in
+  the SDK ever sets it; the plugin has to, and did not. So `Audio Amount` and
+  `Audio Band` were inert in every release so far — with no symptom other than
+  nothing happening, which is indistinguishable from a quiet room.
+
+  The audio level is the one value that never passes through `ReadParams` — it is
+  read off the analyser at render time — which is exactly why the parameter
+  mapping test could not see it. It has its own method now, and two tests drive
+  the real host path: one asserts every band responds to a full-scale spectrum,
+  the other that energy confined to the bottom of the spectrum reads louder on
+  Bass than on High.
+
+- **The mixer's name was truncated to `Datamosh Transpl`.**
+  `PluginInfoStruct::PluginName` is `char[16]` and the SDK's copy loop stops at
+  16 bytes without writing a terminator, so a name of 16 or more runs straight
+  into the adjacent `PluginType` field — a host calling `strlen` reads past it.
+  "Datamosh Transplant" is 19 characters. The mixer is now **Mosh Transplant**
+  (15), and both plugins carry a `static_assert` so the limit is found at compile
+  time rather than in a dropdown.
+
 ### Added
 
+- **[VALIDATING.md](VALIDATING.md)** — the procedure for validating a build
+  inside a real Resolume. A ten-minute gated smoke test, a triage table, and a
+  full pass. It is built around the fact that `Passthrough` emits a pixel-exact
+  copy of its input, so a completely dead plugin is indistinguishable from a
+  correctly-bypassing effect; every check is written to tell working apart from
+  inert rather than from black.
+- **`tools/collect-datamosh-diagnostics.sh` / `.ps1`** — strictly read-only
+  diagnostics collectors. They report whether the files are where Resolume looks,
+  whether they are loadable (quarantine, Mark-of-the-Web, architecture, `plugMain`
+  export), whether Resolume scanned the folder, what the log says, and — if the
+  webserver is enabled — whether the effect registered, via `GET /api/v1/effects`.
 - **MIT licence.** Until now the project had none, which legally meant all
   rights reserved — nobody could redistribute or modify it. `LICENSE` is copied
   into every release archive by the release workflow, so the next version is the
@@ -142,7 +180,8 @@ Two defects caught in review before release, both of which fail silently:
   Resolume then silently will not load them; the install notes carry the
   `xattr -dr com.apple.quarantine` fix.
 
-[Unreleased]: https://github.com/legofsalmon/ffgl-datamosh/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/legofsalmon/ffgl-datamosh/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/legofsalmon/ffgl-datamosh/releases/tag/v0.1.3
 [0.1.2]: https://github.com/legofsalmon/ffgl-datamosh/releases/tag/v0.1.2
 [0.1.1]: https://github.com/legofsalmon/ffgl-datamosh/releases/tag/v0.1.1
 [0.1.0]: https://github.com/legofsalmon/ffgl-datamosh/releases/tag/v0.1.0

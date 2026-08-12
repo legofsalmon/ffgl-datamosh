@@ -14,6 +14,7 @@
 #include <RenderTarget.h>
 
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <vector>
 
@@ -32,8 +33,11 @@ struct Testable : PluginType
 	using PluginType::lastAppliedDeltaTime;
 	using PluginType::NO_PARAM;
 	using PluginType::ParamIndex;
+	using PluginType::audioParam;
+	using PluginType::AudioLevel;
 	using PluginType::pipeline;
 	using PluginType::ReadParams;
+	using PluginType::UpdateAudioAndTime;
 
 	/// How many parameters the plugin actually holds, as against how many it
 	/// advertises to the host. The two diverging is what makes a plugin
@@ -363,6 +367,80 @@ TEST( ParametersMapToTheRightFields )
 	CHECK( params.blockSize == 32 );
 	CHECK( params.autoMode == AutoMode::OnBeat );
 	CHECK( params.quality == Quality::Low );
+}
+
+// ---------------------------------------------------------------------------
+// Audio
+//
+// The audio level is the one parameter that never passes through ReadParams —
+// it is read off the SDK's analyser at render time — so ParametersMapToTheRight-
+// Fields could not see that it was returning zero for every band, forever.
+//
+// ffglqs::Audio computes each bin as fft[i] * fft[i] * gain, and gain starts at
+// 0. Nothing in the SDK sets it; the plugin has to. Miss that line and the
+// audio parameters are inert, with no symptom other than nothing happening.
+// ---------------------------------------------------------------------------
+
+/// Delivers an FFT frame the way the host does: element values on the FFT
+/// parameter, then the base's own refresh.
+static void FeedAudio( TestableEffect& plugin, float magnitude )
+{
+	CHECK( plugin.audioParam != nullptr );
+	for( size_t bin = 0; bin < plugin.audioParam->fftData.size(); ++bin )
+		plugin.SetParamElementValue( plugin.audioParam->index, (unsigned int)bin, magnitude );
+
+	// Smoothed, so one frame only moves the value part of the way there.
+	for( int frame = 0; frame < 32; ++frame )
+		plugin.UpdateAudioAndTime();
+}
+
+TEST( EveryAudioBandRespondsToHostFFTData )
+{
+	static const char* const BANDS[] = { "Volume", "Bass", "Mid", "High" };
+
+	for( int band = 0; band < 4; ++band )
+	{
+		TestableEffect plugin;
+		plugin.SetFloatParameter( plugin.ParamIndex( "Audio Band" ), (float)band );
+
+		// Silence reads as silence.
+		FeedAudio( plugin, 0.0f );
+		CHECK_NEAR( plugin.AudioLevel(), 0.0, 1e-4 );
+
+		// A full-scale spectrum has to move it. This is the assertion that fails
+		// when the analyser's gain is left at zero — and it fails for all four
+		// bands at once, which is the signature of a gain problem rather than a
+		// band-selection one.
+		FeedAudio( plugin, 1.0f );
+		const float loud = plugin.AudioLevel();
+		if( loud <= 0.0f )
+			std::fprintf( stderr, "  band %s read %f\n", BANDS[ band ], loud );
+		CHECK( loud > 0.0f );
+	}
+}
+
+TEST( AudioBandSelectionPicksDifferentPartsOfTheSpectrum )
+{
+	// Energy only in the bottom third. Bass must see it and High must not, which
+	// is what distinguishes a working band selector from one that happens to
+	// return the same number four times.
+	auto levelFor = []( int band ) {
+		TestableEffect plugin;
+		plugin.SetFloatParameter( plugin.ParamIndex( "Audio Band" ), (float)band );
+
+		const size_t bins = plugin.audioParam->fftData.size();
+		for( size_t bin = 0; bin < bins; ++bin )
+			plugin.SetParamElementValue( plugin.audioParam->index, (unsigned int)bin,
+			                             bin < bins / 4 ? 1.0f : 0.0f );
+		for( int frame = 0; frame < 32; ++frame )
+			plugin.UpdateAudioAndTime();
+		return plugin.AudioLevel();
+	};
+
+	const float bass = levelFor( 1 );
+	const float high = levelFor( 3 );
+	CHECK( bass > 0.0f );
+	CHECK( bass > high );
 }
 
 TEST( StyleAppliesAPresetAndRevertsWhenTouched )
