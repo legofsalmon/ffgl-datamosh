@@ -42,6 +42,32 @@ All three classic looks come out of the same pipeline:
 **Softness** takes the look from hard macroblock tearing to smooth liquid flow;
 the estimator is the same either way.
 
+**Style** presets — Melt, Bloom, Drag, Liquid, Corrupt — set a coherent group of
+parameters from one dropdown, because reaching for twelve sliders is not
+something anyone does while a set is running. Touching any of the parameters a
+style owns flips it back to Custom, so the dropdown never claims something the
+settings do not say.
+
+### Why there are controls for getting it wrong
+
+The estimator is accurate, and that is a problem worth stating plainly: warping
+the previous frame by the estimated motion reproduces the current frame almost
+exactly. That is correct behaviour and it is also too clean — real datamosh
+looks broken *because the vectors are wrong*.
+
+The **Damage** group exists to be wrong on purpose:
+
+- **Motion Lag** — apply a vector field from N frames ago, so motion lands on
+  content it does not belong to. The closest analogue to what a decoder does
+  with wrong reference frames, and the strongest of the three.
+- **Block Repeat** — a block takes its neighbour's content, the look of one
+  whose data never arrived.
+- **Quantise** — snap vectors to a coarse grid the way a low-bitrate encoder
+  must, giving stepped motion rather than smooth displacement.
+
+Plus **Corruption** (scrambled vectors) and **Chroma Drift** (planes that
+disagree about where they came from).
+
 ## Building
 
 Requires CMake 3.20+ and a C++17 compiler. The FFGL SDK is vendored as a
@@ -71,7 +97,7 @@ Otherwise copy the built `.dll` (Windows) or `.bundle` (macOS) into
 ## Testing
 
 ```sh
-ctest --test-dir build --output-on-failure   # 17 tests
+ctest --test-dir build --output-on-failure   # 32 tests
 ./build/tests/datamosh_tests --profile        # per-pass GPU timing
 ```
 
@@ -79,8 +105,16 @@ The tests create a real headless OpenGL 4.1 core context and drive the pipeline
 exactly as Resolume does, against synthetic clips with **known ground truth** —
 a pattern translating at a known velocity must produce the matching vectors.
 That is the only way to regression-test a motion estimator; "does it look right"
-is not a test. They also cover cut detection, freeze, resize storms, GL object
-lifetime, and that no NaN can reach the feedback buffers.
+is not a test. They also cover cut detection, beat divisors, freeze, motion lag,
+frame-rate-independent decay, resize storms, GL object lifetime, and that no NaN
+can reach the feedback buffers.
+
+`tests/test_plugin.cpp` covers the FFGL-facing shell separately — the frame
+gate, trigger handling, parameter mapping and mixer input selection — because
+that is where four of the first review's five defects lived.
+`BothPluginsSurviveHostInstantiation` replays what a host does before it will
+load a plugin at all, and was written after a defect that made the mixer
+unloadable everywhere with no diagnostic.
 
 The most pointed test is `MotionCompensationReconstructsPureTranslation`: if the
 vector sign, warp direction, pel snapping and block-centre lookup are all
@@ -134,6 +168,15 @@ Roughly 61 MB of buffers per instance at 1080p, most passes at block resolution.
   its own framebuffer.
 - **One plugin per binary.** `FFGL.cpp` dispatches through a single global
   `g_CurrPluginInfo`, so the effect and mixer cannot share a library.
+- **`SetParamInfo` appends, it does not update.** There is no way to rename an
+  inherited parameter or change its declared default: calling it for an existing
+  index adds a phantom record, `GetNumParams` then overreports, and
+  `instantiateGL` — which writes every index's default before handing the plugin
+  over — fails on the phantom and destroys the instance. The plugin simply never
+  loads. This is why the mixer leaves its inherited `mixVal` alone and uses its
+  own Mix, and why `BothPluginsSurviveHostInstantiation` exists.
+- **`Decay` is a half-life, not a per-frame fraction**, so the same setting
+  bleeds back at the same rate whatever the frame rate is doing.
 
 ## Parameters
 
@@ -143,22 +186,30 @@ Cut Sensitivity · Burst Length · Beat Divisor
 **Motion** — Gain · Freeze · Smoothing · Threshold · Block Size (4/8/16/32) ·
 Softness · Pel Snap · Invert
 
-**Damage** — Decay · Corruption · Chroma Drift · Mix
+**Damage** — Motion Lag · Block Repeat · Quantise · Corruption · Chroma Drift ·
+Decay
 
 **Sync** — Audio (FFT) · Audio Amount · Audio Band
 
-**Cost** — Quality (Low / Medium / High / Ultra)
+**Output** — Mix · Quality (Low / Medium / High / Ultra)
+
+Parameters are filed into collapsible groups via `SetParamGroup`, which needs
+Resolume 7.3 or later.
 
 The mixer adds **Motion Source**, choosing whether motion comes from its own
-layer or the one below, and **Blend** — the parameter FFGL's mixer base always
-registers, folded into the wet/dry so it is not a dead slider.
+layer or the one below. It also inherits a `mixVal` slider from FFGL's mixer
+base which this plugin does not read — see the `SetParamInfo` note above for why
+it cannot simply be renamed away.
 
 ## Status
 
 Working and tested, not yet validated inside Resolume itself — that needs a
 machine with Resolume on it. The manual checklist to run there:
 
-- [ ] Both plugins appear and load
+- [ ] Both plugins appear and load, with their thumbnails
+- [ ] Parameters render as collapsible groups (needs Resolume 7.3+)
+- [ ] Style presets move the sliders in the panel, and survive pressing Trigger
+- [ ] Find out what Resolume does with the mixer's inherited `mixVal` slider
 - [ ] Composition resolution change while running
 - [ ] Clip cut, layer bypass, rapid parameter scrubbing
 - [ ] Two instances stacked

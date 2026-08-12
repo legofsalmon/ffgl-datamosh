@@ -1,49 +1,17 @@
-#include "DatamoshPlugin.h"
+#include "DatamoshEffect.h"
+#include "Thumbnail.h"
 
 #include <ffgl/FFGLPluginInfo.h>
-#include <ffglquickstart/FFGLPlugin.h>
+#include <ffgl/FFGLThumbnailInfo.h>
 
-namespace datamosh {
+// The class lives in the header so the tests can construct and drive it. This
+// file holds only what must be exactly once per binary.
 
-/// The single-input build. Drops on a layer, a group, or the composition.
-///
-/// On the composition it is at its most useful: with Auto Mode set to On Cut it
-/// detects every clip change underneath and melts through it, which is the
-/// classic datamosh transition with nothing for the operator to trigger.
-class DatamoshEffect : public DatamoshPlugin< ffglqs::Effect >
-{
-public:
-	DatamoshEffect()
-	{
-		DeclareCommonParams();
-	}
-
-protected:
-	bool GatherInputs( ProcessOpenGLStruct* pGL, FrameInputs& inputs ) override
-	{
-		if( pGL->numInputTextures < 1 || pGL->inputTextures[ 0 ] == nullptr )
-			return false;
-
-		const FFGLTextureStruct& texture = *pGL->inputTextures[ 0 ];
-		if( texture.Handle == 0 || texture.Width == 0 || texture.Height == 0 )
-			return false;
-
-		const FFGLTexCoords maxCoords = GetMaxGLTexCoords( texture );
-
-		// One input drives both: the clip's own motion moshes its own pixels.
-		inputs.pixelTexture  = texture.Handle;
-		inputs.pixelMaxU     = maxCoords.s;
-		inputs.pixelMaxV     = maxCoords.t;
-		inputs.motionTexture = texture.Handle;
-		inputs.motionMaxU    = maxCoords.s;
-		inputs.motionMaxV    = maxCoords.t;
-		inputs.width         = static_cast< GLsizei >( texture.Width );
-		inputs.height        = static_cast< GLsizei >( texture.Height );
-		return true;
-	}
-};
-
-}  // namespace datamosh
+static CFFGLThumbnailInfo ThumbnailInfo(
+	datamosh::thumbnail::WIDTH,
+	datamosh::thumbnail::HEIGHT,
+	datamosh::thumbnail::Generate( 0 )
+);
 
 // FFGL loads one plugin per binary: FFGL.cpp resolves everything through a
 // single global plugin record, so the mixer build is a separate library.

@@ -29,6 +29,7 @@ endif()
 add_executable( datamosh_tests
     main.cpp
     test_pipeline.cpp
+    test_plugin.cpp
     benchmark.cpp
     harness/GLContext.h   harness/GLContext.cpp
     harness/Synthetic.h   harness/Synthetic.cpp
@@ -36,7 +37,11 @@ add_executable( datamosh_tests
 )
 
 target_link_libraries( datamosh_tests PRIVATE datamosh::core datamosh::ffgl_sdk )
-target_include_directories( datamosh_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" )
+target_include_directories( datamosh_tests PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+    # The plugin classes live in headers so this can drive them; only the
+    # CFFGLPluginInfo registration stays in the .cpp, one per binary.
+    "${CMAKE_SOURCE_DIR}/src/plugins" )
 
 if( DATAMOSH_TEST_BACKEND STREQUAL "EGL" )
     target_compile_definitions( datamosh_tests PRIVATE DATAMOSH_TEST_EGL )

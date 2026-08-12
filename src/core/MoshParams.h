@@ -66,7 +66,8 @@ struct MoshParams
 	bool  invertDirection = false;
 
 	// --- Damage -----------------------------------------------------------
-	/// Bleeds the live image back in even at full mosh. 0 holds forever.
+	/// Bleeds the live image back in even at full mosh, as a half-life. 0 holds
+	/// forever; 1 is a fraction of a second.
 	float decay       = 0.0f;
 	/// 0..1 chance of a block holding or scrambling its vector.
 	float corruption  = 0.0f;
@@ -74,6 +75,21 @@ struct MoshParams
 	float chromaDrift = 0.0f;
 	/// Wet/dry against the untouched input.
 	float mix         = 1.0f;
+
+	/// Frames of delay between estimating the motion field and applying it.
+	///
+	/// The estimator is accurate enough that displacing the previous frame by it
+	/// reproduces the current frame — correct, and far too clean to read as a
+	/// broken codec. Feeding the warp a field from several frames ago applies
+	/// motion to content it does not belong to, which is what a decoder working
+	/// from wrong reference frames actually does.
+	int   motionLag   = 0;
+	/// 0..1 chance of a block taking a neighbour's content instead of its own,
+	/// the look of a block whose data never arrived.
+	float blockRepeat = 0.0f;
+	/// Snaps vectors to a coarse grid the way a low-bitrate encoder must,
+	/// giving stepped chunky motion rather than smooth displacement.
+	float motionQuantise = 0.0f;
 
 	// --- Sync -------------------------------------------------------------
 	/// 0..1 audio level, from the host's FFT.

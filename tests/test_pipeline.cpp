@@ -585,6 +585,133 @@ TEST( MoshingHoldsPixelsThroughACut )
 	CHECK( held < 0.85f );
 }
 
+TEST( FlowHistoryReturnsTheFieldFromNFramesAgo )
+{
+	Rig rig;
+	CHECK( rig.Setup( FRAME_WIDTH, FRAME_HEIGHT ) );
+
+	MoshParams params = RawEstimatorParams();
+
+	// Motion that changes every frame, so a field from the wrong frame is
+	// obviously the wrong field rather than coincidentally similar.
+	std::vector< std::vector< float > > recorded;
+	const float velocities[] = { 1.0f, 4.0f, -3.0f, 2.0f, -5.0f, 3.0f, -1.0f, 6.0f, -4.0f, 2.0f };
+
+	float shift = 0.0f;
+	for( int frame = 0; frame < 10; ++frame )
+	{
+		rig.PushShifted( shift, 0.0f, params, frame );
+		shift += velocities[ frame ];
+		recorded.push_back( ReadTarget( rig.pipeline.GetFlowField() ) );
+	}
+
+	// Delayed(0) is the field just written; Delayed(n) is n frames before it.
+	const int lastFrame = static_cast< int >( recorded.size() ) - 1;
+	for( int framesAgo = 0; framesAgo <= 5; ++framesAgo )
+	{
+		const std::vector< float > delayed = ReadTarget( rig.pipeline.GetDelayedFlowField( framesAgo ) );
+		CHECK_NEAR( MeanVectorDifference( delayed, recorded[ lastFrame - framesAgo ] ), 0.0, 1e-6 );
+	}
+
+	rig.Teardown();
+}
+
+TEST( MotionLagChangesWhatTheWarpApplies )
+{
+	// Lag exists because an accurate estimator reconstructs the frame, which is
+	// correct and far too clean. Applying a field from several frames back puts
+	// motion on content it does not belong to, and that has to show.
+	const auto run = []( int lag ) {
+		Rig rig;
+		if( !rig.Setup( FRAME_WIDTH, FRAME_HEIGHT ) )
+			return std::vector< float >{};
+
+		MoshParams params      = RawEstimatorParams();
+		params.moshAmount      = 1.0f;
+		params.motionThreshold = 0.0f;
+		params.motionLag       = lag;
+
+		// Direction reverses partway, so a stale field is pointing the wrong way
+		// entirely rather than merely being out of date.
+		float shift = 0.0f;
+		for( int frame = 0; frame < 14; ++frame )
+		{
+			rig.PushShifted( shift, 0.0f, params, frame );
+			shift += ( frame < 7 ) ? 4.0f : -4.0f;
+		}
+
+		std::vector< float > result = ReadTarget( rig.pipeline.GetAccumulation() );
+		rig.Teardown();
+		return result;
+	};
+
+	const std::vector< float > live    = run( 0 );
+	const std::vector< float > delayed = run( 6 );
+
+	CHECK( !live.empty() );
+	CHECK( !delayed.empty() );
+	CHECK( MeanInteriorDifference( live, delayed, FRAME_WIDTH, FRAME_HEIGHT, 16 ) > 0.01f );
+}
+
+TEST( DecayIsIndependentOfFrameRate )
+{
+	// Decay is a half-life, not a per-frame fraction. The same wall-clock second
+	// must bleed the same amount of live image back in whether it arrives as 30
+	// steps or 60 — otherwise the control means something different on every
+	// machine, and on the same machine whenever the frame rate dips.
+	const auto meanAfterOneSecond = []( int stepsPerSecond ) {
+		Rig rig;
+		if( !rig.Setup( FRAME_WIDTH, FRAME_HEIGHT ) )
+			return -1.0f;
+
+		MoshParams params      = RawEstimatorParams();
+		params.moshAmount      = 1.0f;
+		params.motionThreshold = 0.0f;
+		params.decay           = 0.9f;
+		// Gain of zero makes the warp an identity copy, so the only thing left
+		// varying between the two runs is the decay arithmetic itself. The gate
+		// still opens, because it measures the estimated motion before gain.
+		params.motionGain      = 0.0f;
+
+		// Build a field worth freezing, with decay off so this phase is
+		// identical across both runs. Freeze stays off here: turning it on
+		// before there is anything to hold just holds zero, and a zero field
+		// closes the gate so nothing decays at all.
+		params.motionFreeze = 0.0f;
+		params.decay        = 0.0f;
+		float shift         = 0.0f;
+		for( int frame = 0; frame < 8; ++frame )
+		{
+			rig.PushShifted( shift, 0.0f, params, frame );
+			shift += 3.0f;
+		}
+
+		// One second of a constant white frame bleeding in. The field is frozen
+		// now, so both runs displace by identical vectors and only the decay
+		// arithmetic differs.
+		params.motionFreeze = 1.0f;
+		params.decay        = 0.9f;
+		params.deltaTime    = 1.0f / stepsPerSecond;
+		const std::vector< uint8_t > white = MakeSolid( FRAME_WIDTH, FRAME_HEIGHT, 255, 255, 255 );
+		for( int step = 0; step < stepsPerSecond; ++step )
+			rig.PushImage( white, params, 8 + step );
+
+		const float mean = MeanComponent( ReadTarget( rig.pipeline.GetAccumulation() ), 0 );
+		rig.Teardown();
+		return mean;
+	};
+
+	const float atThirty = meanAfterOneSecond( 30 );
+	const float atSixty  = meanAfterOneSecond( 60 );
+
+	CHECK( atThirty > 0.0f );
+	CHECK( atSixty > 0.0f );
+	// Partway there, so the test would actually notice a rate difference.
+	CHECK( atThirty > 0.2f );
+	CHECK( atThirty < 0.95f );
+	CHECK_NEAR( atThirty, atSixty, 0.05 );
+}
+
 // ---------------------------------------------------------------------------
 // Robustness
 // ---------------------------------------------------------------------------

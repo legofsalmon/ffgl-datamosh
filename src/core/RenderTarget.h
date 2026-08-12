@@ -113,4 +113,74 @@ private:
 	int          front = 0;
 };
 
+/// A ring of render targets keeping the last N frames of a buffer.
+///
+/// Exists for the motion field, so the warp can be fed a vector field from
+/// several frames ago rather than the current one. That mismatch is the point:
+/// an estimator this accurate reconstructs the frame almost exactly, which is
+/// correct and also far too clean to read as datamosh. Applying motion to
+/// content it does not belong to is what a decoder does when its reference
+/// frames are wrong, and it is where the characteristic smearing comes from.
+///
+/// Only ever holds block-resolution buffers, so the whole ring costs about a
+/// megabyte at 1080p.
+class FlowHistory
+{
+public:
+	static constexpr int LENGTH = 16;
+
+	bool Allocate( GLsizei width, GLsizei height, GLint internalFormat )
+	{
+		for( RenderTarget& target : ring )
+		{
+			if( !target.Allocate( width, height, internalFormat ) )
+				return false;
+		}
+		head = 0;
+		return true;
+	}
+
+	void Release()
+	{
+		for( RenderTarget& target : ring )
+			target.Release();
+		head = 0;
+	}
+
+	bool IsValid() const { return ring[ 0 ].IsValid(); }
+
+	void Clear() const
+	{
+		for( const RenderTarget& target : ring )
+			target.Clear();
+	}
+
+	/// The field written most recently.
+	const RenderTarget& Current() const { return ring[ head ]; }
+
+	/// Where the next field should be rendered. Call Advance() afterwards.
+	const RenderTarget& Next() const { return ring[ ( head + 1 ) % LENGTH ]; }
+
+	void Advance() { head = ( head + 1 ) % LENGTH; }
+
+	/// The field from `framesAgo` frames back, clamped to what the ring holds.
+	const RenderTarget& Delayed( int framesAgo ) const
+	{
+		const int clamped = framesAgo < 0 ? 0 : ( framesAgo > LENGTH - 1 ? LENGTH - 1 : framesAgo );
+		return ring[ ( head - clamped + LENGTH ) % LENGTH ];
+	}
+
+	size_t ByteSize() const
+	{
+		size_t total = 0;
+		for( const RenderTarget& target : ring )
+			total += target.ByteSize();
+		return total;
+	}
+
+private:
+	RenderTarget ring[ LENGTH ];
+	int          head = 0;
+};
+
 }  // namespace datamosh

@@ -16,6 +16,8 @@ uniform vec2  FrameRes;
 uniform float Smoothing;   // 0..1 temporal blend toward the previous field
 uniform float Freeze;      // 0..1 hold the field instead of re-estimating
 uniform float Softness;    // 0..1 spatial blur of the field
+uniform float Quantise;    // 0..1 coarseness of the vector grid
+uniform float BlockPixels; // macroblock edge, the coarsest sensible grid step
 uniform float MaxPixels;   // hard cap on displacement per frame, in pixels
 uniform bool  HasHistory;  // false on the first frame after a resize
 
@@ -61,6 +63,16 @@ void main()
 	// is P-frame duplication and produces the bloom.
 	conditioned = mix( conditioned, previous, clamp( Smoothing, 0.0, 1.0 ) );
 	conditioned = mix( conditioned, previous, clamp( Freeze, 0.0, 1.0 ) );
+
+	// Coarsen the vector grid. A real encoder cannot afford to describe motion
+	// precisely at low bitrates, and the stepped movement that produces is a
+	// large part of what reads as "compressed" rather than "warped".
+	if( Quantise > 0.0 )
+	{
+		float stepPixels = mix( 0.5, max( 1.0, BlockPixels * 0.5 ), clamp( Quantise, 0.0, 1.0 ) );
+		vec2  stepUV     = vec2( stepPixels ) / FrameRes;
+		conditioned      = round( conditioned / stepUV ) * stepUV;
+	}
 
 	// Hard cap. Without it a bad match near a cut can produce a vector that
 	// samples half a screen away and smears the whole frame in one step.

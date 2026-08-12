@@ -85,7 +85,12 @@ public:
 
 	/// Intermediate buffers, exposed so the tests can assert on what the
 	/// estimator actually produced rather than on how the result looks.
-	const RenderTarget& GetFlowField() const { return smoothFlow.Front(); }
+	const RenderTarget& GetFlowField() const { return flowHistory.Current(); }
+	/// The field from `framesAgo` back, for asserting on Motion Lag.
+	const RenderTarget& GetDelayedFlowField( int framesAgo ) const
+	{
+		return flowHistory.Delayed( framesAgo );
+	}
 	const RenderTarget& GetAccumulation() const { return accum.Front(); }
 	const RenderTarget& GetControlState() const { return state.Front(); }
 
@@ -123,7 +128,7 @@ private:
 	RenderTarget colourTarget;  ///< ingested pixel source, straight alpha
 	PingPong     luma;          ///< front = previous frame, back = current
 	PingPong     searchFlow;    ///< coarse-to-fine iteration within a frame
-	PingPong     smoothFlow;    ///< conditioned field, carried between frames
+	FlowHistory  flowHistory;   ///< conditioned fields, last N frames
 	PingPong     accum;         ///< the moshed image
 	RenderTarget sceneDiff;     ///< small change map, reduced via its mips
 	PingPong     state;         ///< 1x1 control state

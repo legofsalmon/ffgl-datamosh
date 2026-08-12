@@ -134,7 +134,7 @@ void MoshPipeline::ReleaseTargets()
 	colourTarget.Release();
 	luma.Release();
 	searchFlow.Release();
-	smoothFlow.Release();
+	flowHistory.Release();
 	accum.Release();
 	sceneDiff.Release();
 	state.Release();
@@ -187,7 +187,9 @@ bool MoshPipeline::EnsureResources( GLsizei width, GLsizei height, int blockSize
 		luma.Allocate( width, height, GL_R16F, /*withMips*/ true ) &&
 		// RGBA rather than RG so the match residual rides along with the vector.
 		searchFlow.Allocate( flowWidth, flowHeight, GL_RGBA16F ) &&
-		smoothFlow.Allocate( flowWidth, flowHeight, GL_RGBA16F ) &&
+		// A ring rather than a ping-pong, so Motion Lag can reach back several
+		// frames. Block resolution keeps the whole thing around a megabyte.
+		flowHistory.Allocate( flowWidth, flowHeight, GL_RGBA16F ) &&
 		// 16F, not 8-bit: this buffer is resampled into itself every frame, and
 		// at 8 bits the rounding compounds into visible banding within seconds.
 		accum.Allocate( width, height, GL_RGBA16F ) &&
@@ -211,7 +213,7 @@ bool MoshPipeline::EnsureResources( GLsizei width, GLsizei height, int blockSize
 	// system means the first frame could seed itself with garbage.
 	luma.Clear();
 	searchFlow.Clear();
-	smoothFlow.Clear();
+	flowHistory.Clear();
 	accum.Clear();
 	sceneDiff.Clear();
 	state.Clear();
@@ -234,7 +236,7 @@ void MoshPipeline::LogVramBudget() const
 size_t MoshPipeline::GetVramBytes() const
 {
 	return colourTarget.ByteSize() + luma.ByteSize() + searchFlow.ByteSize() +
-	       smoothFlow.ByteSize() + accum.ByteSize() + sceneDiff.ByteSize() + state.ByteSize();
+	       flowHistory.ByteSize() + accum.ByteSize() + sceneDiff.ByteSize() + state.ByteSize();
 }
 
 // ---------------------------------------------------------------------------
@@ -366,7 +368,7 @@ void MoshPipeline::PassMotionSearch( const MoshParams& params )
 		// The first iteration starts from last frame's conditioned field.
 		// Motion is continuous, so yesterday's answer is a far better opening
 		// guess than zero, and it costs nothing.
-		const RenderTarget& estimate = isFirst ? smoothFlow.Front() : searchFlow.Front();
+		const RenderTarget& estimate = isFirst ? flowHistory.Current() : searchFlow.Front();
 		const bool hasEstimate       = isFirst ? hasHistory : true;
 
 		const RenderTarget& target = searchFlow.Back();
@@ -401,18 +403,20 @@ void MoshPipeline::PassFlowPost( const MoshParams& params )
 	const float maxPixels = std::min( 256.0f, std::max( 8.0f, 4.0f * ( 1 << ( levels - 1 ) ) ) );
 
 	ffglex::ScopedShaderBinding shaderBinding( flowPostShader.GetGLID() );
-	ffglex::ScopedFBOBinding    fboBinding( smoothFlow.Back().GetFBO(), ffglex::ScopedFBOBinding::RB_REVERT );
+	ffglex::ScopedFBOBinding    fboBinding( flowHistory.Next().GetFBO(), ffglex::ScopedFBOBinding::RB_REVERT );
 	ScopedViewport              viewport( flowWidth, flowHeight );
 
 	PassTextures textures;
 	textures.Add( flowPostShader, "RawFlow", searchFlow.Front().GetTexture() );
-	textures.Add( flowPostShader, "PrevFlow", smoothFlow.Front().GetTexture() );
+	textures.Add( flowPostShader, "PrevFlow", flowHistory.Current().GetTexture() );
 
 	flowPostShader.Set( "FlowRes", static_cast< float >( flowWidth ), static_cast< float >( flowHeight ) );
 	flowPostShader.Set( "FrameRes", static_cast< float >( frameWidth ), static_cast< float >( frameHeight ) );
 	flowPostShader.Set( "Smoothing", params.motionSmoothing );
 	flowPostShader.Set( "Freeze", params.motionFreeze );
 	flowPostShader.Set( "Softness", params.softness );
+	flowPostShader.Set( "Quantise", params.motionQuantise );
+	flowPostShader.Set( "BlockPixels", static_cast< float >( activeBlockSize ) );
 	flowPostShader.Set( "MaxPixels", maxPixels );
 	flowPostShader.Set( "HasHistory", hasHistory ? 1 : 0 );
 	flowPostShader.Set( "MaxUV", 1.0f, 1.0f );
@@ -420,7 +424,7 @@ void MoshPipeline::PassFlowPost( const MoshParams& params )
 	quad.Draw();
 
 	fboBinding.EndScope();
-	smoothFlow.Swap();
+	flowHistory.Advance();
 }
 
 void MoshPipeline::PassMosh( const MoshParams& params )
@@ -434,7 +438,9 @@ void MoshPipeline::PassMosh( const MoshParams& params )
 	PassTextures textures;
 	textures.Add( moshShader, "CurColor", colourTarget.GetTexture() );
 	textures.Add( moshShader, "AccumPrev", accum.Front().GetTexture() );
-	textures.Add( moshShader, "Flow", smoothFlow.Front().GetTexture() );
+	// Not the current field but one from `motionLag` frames ago, so the motion
+	// lands on content it does not belong to.
+	textures.Add( moshShader, "Flow", flowHistory.Delayed( params.motionLag ).GetTexture() );
 	textures.Add( moshShader, "State", state.Front().GetTexture() );
 
 	moshShader.Set( "FrameRes", static_cast< float >( frameWidth ), static_cast< float >( frameHeight ) );
@@ -446,8 +452,10 @@ void MoshPipeline::PassMosh( const MoshParams& params )
 	moshShader.Set( "ThresholdPixels", params.motionThreshold * THRESHOLD_PIXEL_RANGE );
 	moshShader.Set( "Decay", params.decay );
 	moshShader.Set( "Corruption", params.corruption );
+	moshShader.Set( "BlockRepeat", params.blockRepeat );
 	moshShader.Set( "ChromaDrift", params.chromaDrift );
 	moshShader.Set( "FrameSeed", static_cast< float >( params.frame ) );
+	moshShader.Set( "DeltaTime", params.deltaTime );
 	moshShader.Set( "HasHistory", hasHistory ? 1 : 0 );
 	moshShader.Set( "MaxUV", 1.0f, 1.0f );
 

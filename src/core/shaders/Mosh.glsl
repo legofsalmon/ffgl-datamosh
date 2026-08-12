@@ -26,8 +26,10 @@ uniform float Direction;        // +1 or -1
 uniform float ThresholdPixels;  // motion below this does not mosh
 uniform float Decay;
 uniform float Corruption;
+uniform float BlockRepeat;
 uniform float ChromaDrift;
 uniform float FrameSeed;
+uniform float DeltaTime;
 uniform bool  HasHistory;
 
 in vec2 uv;
@@ -90,27 +92,54 @@ void main()
 	vec2 offsetPixels = offset * FrameRes;
 	offset = mix( offset, round( offsetPixels ) / FrameRes, clamp( PelSnap, 0.0, 1.0 ) );
 
+	// A block whose data never arrived shows whatever the decoder had to hand,
+	// which is usually the block next door rather than its own history.
+	vec2 sampleUV = uv + offset;
+	if( BlockRepeat > 0.0 )
+	{
+		vec2  blockId = floor( uv * FlowRes );
+		float roll    = Hash( blockId, FrameSeed + 91.0 );
+		if( roll < BlockRepeat )
+		{
+			vec2 direction = vec2( Hash( blockId, FrameSeed + 7.0 ),
+			                       Hash( blockId, FrameSeed + 13.0 ) ) * 2.0 - 1.0;
+			sampleUV += sign( direction ) / FlowRes;
+		}
+	}
+
 	vec4 moshed;
 	if( ChromaDrift > 0.0 )
 	{
 		// Channels displaced by slightly different amounts, the colour fringing
 		// that shows up when a damaged block's planes disagree.
 		vec2 drift = offset * ChromaDrift;
-		moshed.r = texture( AccumPrev, uv + offset + drift ).r;
-		moshed.g = texture( AccumPrev, uv + offset ).g;
-		moshed.b = texture( AccumPrev, uv + offset - drift ).b;
-		moshed.a = texture( AccumPrev, uv + offset ).a;
+		moshed.r = texture( AccumPrev, sampleUV + drift ).r;
+		moshed.g = texture( AccumPrev, sampleUV ).g;
+		moshed.b = texture( AccumPrev, sampleUV - drift ).b;
+		moshed.a = texture( AccumPrev, sampleUV ).a;
 	}
 	else
 	{
-		moshed = texture( AccumPrev, uv + offset );
+		moshed = texture( AccumPrev, sampleUV );
 	}
 
 	// Still regions keep refreshing normally; moving ones carry old pixels
 	// forward. Threshold at 0 moshes everything, which gives the full melt.
 	float gate = smoothstep( ThresholdPixels, ThresholdPixels + 0.5, motionPixels );
 
-	float persistence = clamp( moshLevel * gate * ( 1.0 - clamp( Decay, 0.0, 1.0 ) ), 0.0, 1.0 );
+	// Decay expressed as a half-life rather than a per-frame fraction, so the
+	// same setting bleeds the live image back at the same rate whether the host
+	// is running at 30 or 60 or an uneven frame rate. A flat multiplier would
+	// decay twice as fast at double the frame rate, which makes the control
+	// mean something different on every machine it runs on.
+	float retention = 1.0;
+	if( Decay > 0.0 )
+	{
+		float halfLife = mix( 8.0, 0.05, clamp( Decay, 0.0, 1.0 ) );
+		retention      = exp2( -DeltaTime / halfLife );
+	}
+
+	float persistence = clamp( moshLevel * gate * retention, 0.0, 1.0 );
 
 	vec4 result = mix( live, moshed, persistence );
 
