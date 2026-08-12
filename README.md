@@ -67,7 +67,7 @@ Install straight into Resolume with
 ## Test
 
 ```sh
-ctest --test-dir build --output-on-failure   # 34 tests
+ctest --test-dir build --output-on-failure   # 40 tests
 ./build/tests/datamosh_tests --profile        # per-pass GPU timing
 ```
 
@@ -95,10 +95,17 @@ the version there; the Releases API creates the tag against the chosen commit.
 Running it with the version left empty builds and packages without publishing,
 which is the way to test a change to the packaging itself.
 
-## Status — not yet validated in Resolume
+## Status — smoke test passed, full pass outstanding
 
-Everything is verified by the test suite; none of it is verified against the
-actual host, and the tuning defaults have never seen real video.
+It loads and runs in Resolume. The smoke test passes on a real host: both
+plugins register and instantiate, the effect renders, Resolume delivers
+parameter writes, the motion estimator is genuinely running rather than the
+pipeline falling through to passthrough, and wide-range parameters arrive at
+their real values rather than normalised 0..1.
+
+Outstanding: the aesthetic sweeps, a 30-minute soak, GL-state hygiene in a
+chain, and the mixer beyond instantiation. The tuning defaults have still never
+been judged against real footage.
 
 **[VALIDATING.md](VALIDATING.md)** is the procedure for closing that gap: a
 ten-minute smoke test, a triage table for when it fails, and a full pass. It is
