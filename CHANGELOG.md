@@ -6,7 +6,38 @@ Notable changes to ffgl-datamosh. Format follows
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **[AGENT-RUNBOOK.md](AGENT-RUNBOOK.md)** and **[CLAUDE.md](CLAUDE.md)** — the
+  validation procedure written for a coding agent running on the machine that has
+  Resolume, rather than for a person at the keyboard.
+
+  It exists because an agent has capabilities a person does not: Resolume's REST
+  API can set a parameter *through the host's own parameter path* and capture a
+  render target as a PNG, so most of the smoke test becomes a measurement instead
+  of an opinion. `CLAUDE.md` is picked up automatically by a local Claude Code
+  session and carries the traps — chiefly that `Passthrough` emits a pixel-exact
+  copy of its input, so a dead plugin cannot be told from a working bypass by
+  looking.
+
+  It is equally explicit about what an agent must hand back: whether the effect
+  looks any good, whether the tuning defaults suit real footage, whether the
+  parameter panel groups correctly. And it requires consent and a scratch
+  composition before any `PUT`, because those writes change live state and
+  Resolume has no undo an agent can drive.
+
+- **`tools/snapshot-diff.py`** — compares two PNG snapshots and returns an exit
+  code, so "Mosh Amount 0 must be pixel-identical to bypass" and "Mosh Amount 1
+  must diverge" are assertions rather than impressions. Pure standard library.
+  Verified by round-tripping all five PNG row filters across greyscale,
+  truecolour and alpha at 8 and 16 bits.
+
+### Changed
+
+- The release workflow normalises a missing `v` on the version input and rejects
+  anything that is not `vMAJOR.MINOR.PATCH`. Dispatching with `0.1.3` produced a
+  release tagged `0.1.3` alongside three `v`-prefixed ones — nothing broke, but
+  it made the newest release the odd one out.
 
 ## [0.1.3] — 2026-08-12
 
