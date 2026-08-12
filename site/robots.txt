@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://datamosh.letissier.ie/sitemap.xml

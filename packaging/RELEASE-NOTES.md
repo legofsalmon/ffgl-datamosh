@@ -5,7 +5,7 @@ Two FFGL plugins that simulate datamoshing in Resolume, over a shared render cor
 | **Datamosh** | Effects list — a layer, a group, or the composition |
 | **Datamosh Transplant** | A layer's blend-mode dropdown — applies that layer's motion to the layers below |
 
-**📖 [Documentation](https://legofsalmon.github.io/ffgl-datamosh/)** · [Parameter reference](https://legofsalmon.github.io/ffgl-datamosh/parameters.html) · [Recipes](https://legofsalmon.github.io/ffgl-datamosh/recipes.html)
+**📖 [Documentation](https://datamosh.letissier.ie)** · [Parameter reference](https://datamosh.letissier.ie/parameters.html) · [Recipes](https://datamosh.letissier.ie/recipes.html)
 
 ---
 
