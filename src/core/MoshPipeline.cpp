@@ -322,6 +322,7 @@ void MoshPipeline::PassControl( const MoshParams& params )
 	controlShader.Set( "DiffLevel", static_cast< float >( sceneDiff.GetMipLevels() - 1 ) );
 	controlShader.Set( "MoshAmount", params.moshAmount );
 	controlShader.Set( "Trigger", params.trigger ? 1 : 0 );
+	controlShader.Set( "Hold", params.hold ? 1 : 0 );
 	controlShader.Set( "Reset", params.reset ? 1 : 0 );
 	controlShader.Set( "AutoMode", static_cast< int >( params.autoMode ) );
 	controlShader.Set( "Sensitivity", params.sensitivity );

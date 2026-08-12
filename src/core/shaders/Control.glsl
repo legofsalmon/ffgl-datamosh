@@ -21,6 +21,7 @@ uniform float     DiffLevel;  // the 1x1 level of SceneDiff
 
 uniform float MoshAmount;
 uniform bool  Trigger;
+uniform bool  Hold;
 uniform bool  Reset;
 uniform int   AutoMode;     // 0 manual, 1 on cut, 2 on beat
 uniform float Sensitivity;
@@ -108,11 +109,26 @@ void main()
 	if( fire )
 		burst = max( Duration, 0.0 );
 
+	// A finger on Hold takes ownership of the level, so no automatic burst is
+	// left running underneath it. Without this, releasing in On Beat does
+	// nothing visible — at 128bpm with Beat Divisor 1 the bursts refire every
+	// 469ms while Burst Length defaults to a full second, so `burst` never
+	// reaches zero and the level stays pinned. A release that changes nothing
+	// is indistinguishable from a control that has stuck on, which is the one
+	// thing this must never look like.
+	if( Hold )
+		burst = 0.0;
+
 	// Held before the countdown, not after, so a burst shorter than one frame
 	// still produces one frame of mosh. Otherwise a short Burst Length — or any
 	// setting at all on a host running at 30fps — expires inside the frame that
 	// started it and the trigger appears to do nothing.
-	float held = ( fire || burst > 0.0 ) ? 1.0 : 0.0;
+	//
+	// Hold is a level rather than an edge: it keeps the gate open for exactly as
+	// long as it is true, with no reference to Duration, so it plays like a key.
+	// It deliberately does not touch `burst` — a hold running at the same time
+	// as an auto-fired burst must not cut that burst short when it releases.
+	float held = ( Hold || fire || burst > 0.0 ) ? 1.0 : 0.0;
 
 	burst = max( 0.0, burst - DeltaTime );
 	float target = clamp( max( MoshAmount + AudioLevel * AudioAmount, held ), 0.0, 1.0 );

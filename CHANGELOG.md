@@ -8,6 +8,32 @@ Notable changes to ffgl-datamosh. Format follows
 
 ### Added
 
+- **`Hold` — a played, piano-style mosh.** Full mosh for exactly as long as it is
+  on, ignoring `Burst Length` entirely. Map it to a key or MIDI note and tick
+  **Piano** in the shortcut; Piano is a property of the shortcut, not of the
+  parameter, so the plugin's job is only to expose something momentary-mappable.
+
+  It is a boolean rather than a `ParamTrigger` for two independent reasons. The
+  SDK's `consumeAllTrigger()` zeroes every trigger after each rendered frame, so
+  an event cannot express a state that outlives a frame. And Resolume's own
+  object model treats events as instants — the REST `EventParameter` schema has
+  no `value` field at all and is excluded from the `GET`/`PUT` lists — so a
+  latched event could not be inspected, written off, or reset. A boolean can be
+  read back, forced off, and clicked in the panel, which is the whole safety
+  argument for a control that could conceivably stick.
+
+  Two behaviours exist because a stuck effect mid-set is the worst outcome in
+  this design space. A hold takes ownership of the level while it is down, so no
+  automatic burst is left running underneath it — without that, releasing in On
+  Beat does nothing visible, since at 128bpm the bursts refire every 469ms while
+  `Burst Length` defaults to a second, and a release that changes nothing is
+  indistinguishable from a control that has jammed. And `Reset` now ends a hold
+  that is still reading on: the shader alone zeroes the level for one frame and
+  the still-true hold puts it straight back, so on its own Reset was a blink
+  rather than a way out. Hold is the only state here that cannot expire by
+  itself, and a lost key-up — focus moved to another application mid-hold, a
+  dropped MIDI note-off — has to have exactly one recovery gesture.
+
 - **[AGENT-RUNBOOK.md](AGENT-RUNBOOK.md)** and **[CLAUDE.md](CLAUDE.md)** — the
   validation procedure written for a coding agent running on the machine that has
   Resolume, rather than for a person at the keyboard.
