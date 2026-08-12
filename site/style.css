@@ -6,29 +6,41 @@
  * from a CDN — the same file has to survive a strict content policy.
  */
 
-/* Light is the base palette. Every colour is declared here and only
- * redefined by theme, so no component depends on a rule inside a media block. */
+/* The site is dark, full stop — not a mode that follows the operating system.
+ * Video work happens in a dark room in front of a dark host, and the plugin's
+ * own output is judged against black; a page that flips to white on half the
+ * machines that open it is showing the effect against the wrong ground.
+ *
+ * So there is one palette and it lives on bare :root. Nothing is declared
+ * inside a media query, which means no component can depend on a rule that
+ * only some visitors get. */
 :root {
-	--ground:        #f4f2f4;
-	--surface:       #ffffff;
-	--surface-sunk:  #ece8ed;
-	--ink:           #17141a;
-	--ink-soft:      #453e4b;
-	--muted:         #6d6573;
-	--rule:          #ddd6df;
-	--rule-strong:   #c3b9c7;
+	/* Tells the browser to paint its own furniture — scrollbars, form
+	 * controls, the flash before first paint — dark to match. */
+	color-scheme: dark;
+
+	--ground:        #101015;
+	--surface:       #191720;
+	--surface-sunk:  #221e2a;
+	--ink:           #f0ecf2;
+	--ink-soft:      #c8bfd0;
+	--muted:         #968da0;
+	--rule:          #2e2836;
+	--rule-strong:   #4a4255;
 
 	/* Chroma fringe: the magenta half. */
-	--accent:        #c4006a;
-	--accent-ink:    #ffffff;
-	--accent-wash:   #fbe9f2;
+	--accent:        #ff4d9d;
+	--accent-ink:    #1a0210;
+	--accent-wash:   #2c1220;
 	/* The green half, kept for things that are verified or correct. */
-	--good:          #16785c;
-	--good-wash:     #e3f3ee;
-	--warn:          #8a5300;
-	--warn-wash:     #fbeedb;
+	--good:          #3fd2a4;
+	--good-wash:     #10281f;
+	--warn:          #e0a54a;
+	--warn-wash:     #2c2110;
 
-	--shadow: 0 1px 2px rgb(23 20 26 / 6%), 0 8px 24px rgb(23 20 26 / 6%);
+	/* On a dark ground a shadow cannot lift a surface — the surface colour
+	 * does that. This only softens the edge. */
+	--shadow: 0 1px 2px rgb(0 0 0 / 45%), 0 8px 24px rgb(0 0 0 / 35%);
 
 	--mono: ui-monospace, "SF Mono", SFMono-Regular, "Cascadia Mono",
 	        "Roboto Mono", Menlo, Consolas, monospace;
@@ -36,50 +48,6 @@
 	         Palatino, Georgia, serif;
 
 	--measure: 68ch;
-}
-
-@media (prefers-color-scheme: dark) {
-	:root:not([data-theme="light"]) {
-		--ground:       #121016;
-		--surface:      #1a171e;
-		--surface-sunk: #211d26;
-		--ink:          #ece7ef;
-		--ink-soft:     #c5bccb;
-		--muted:        #948b9c;
-		--rule:         #2e2836;
-		--rule-strong:  #453d4f;
-
-		--accent:       #ff4d9d;
-		--accent-ink:   #1a0210;
-		--accent-wash:  #2c1220;
-		--good:         #3fd2a4;
-		--good-wash:    #10281f;
-		--warn:         #e0a54a;
-		--warn-wash:    #2c2110;
-
-		--shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 8px 24px rgb(0 0 0 / 32%);
-	}
-}
-
-:root[data-theme="dark"] {
-	--ground:       #121016;
-	--surface:      #1a171e;
-	--surface-sunk: #211d26;
-	--ink:          #ece7ef;
-	--ink-soft:     #c5bccb;
-	--muted:        #948b9c;
-	--rule:         #2e2836;
-	--rule-strong:  #453d4f;
-
-	--accent:       #ff4d9d;
-	--accent-ink:   #1a0210;
-	--accent-wash:  #2c1220;
-	--good:         #3fd2a4;
-	--good-wash:    #10281f;
-	--warn:         #e0a54a;
-	--warn-wash:    #2c2110;
-
-	--shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 8px 24px rgb(0 0 0 / 32%);
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -94,6 +62,11 @@ body {
 	font-family: var(--serif);
 	font-size: 17px;
 	line-height: 1.65;
+	/* Light-on-dark renders visually heavier than dark-on-light at the same
+	 * weight. Antialiasing rather than subpixel rendering takes the extra
+	 * weight back off, which matters most for the serif running text. */
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
 }
 
 /* ---------------------------------------------------------------- layout -- */
@@ -221,7 +194,9 @@ main {
 	font-size: 11px;
 	letter-spacing: 0.16em;
 	text-transform: uppercase;
-	color: var(--rule-strong);
+	/* --rule-strong is a border colour; as text on the dark ground it sat
+	 * under 2:1 and effectively disappeared. */
+	color: var(--muted);
 	padding: 14px 0 6px;
 }
 

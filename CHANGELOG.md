@@ -6,7 +6,22 @@ Notable changes to ffgl-datamosh. Format follows
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **MIT licence.** Until now the project had none, which legally meant all
+  rights reserved — nobody could redistribute or modify it. `LICENSE` is copied
+  into every release archive by the release workflow, so the next version is the
+  first whose downloads carry it.
+
+### Changed
+
+- The documentation site is dark, and no longer follows the operating system's
+  colour scheme. One palette on `:root` instead of a light base with two dark
+  overrides; `color-scheme` and a `theme-color` meta so the browser's own
+  furniture matches. The plugin's output is judged against black, so showing it
+  on white on half the machines that open the page was showing it wrong.
+- Sidebar section labels were using a border colour as text and sat under 2:1
+  contrast on the dark ground. They use `--muted` now.
 
 ## [0.1.2] — 2026-08-12
 

@@ -19,12 +19,15 @@
 	var COLS = Math.ceil(W / BLOCK), ROWS = Math.ceil(H / BLOCK);
 	var FRONT = Math.floor(ROWS * 0.42);   // the row where refreshing stops
 
+	/* Sampled from the stylesheet rather than hard-coded so the demo cannot
+	 * drift from the page around it. The fallbacks are the same tokens, for
+	 * the case where the stylesheet has not applied yet. */
 	function themeColours() {
 		var styles = getComputedStyle(document.documentElement);
 		return {
-			ground: styles.getPropertyValue('--surface-sunk').trim() || '#eee',
-			ink:    styles.getPropertyValue('--ink').trim() || '#111',
-			accent: styles.getPropertyValue('--accent').trim() || '#c4006a'
+			ground: styles.getPropertyValue('--surface-sunk').trim() || '#221e2a',
+			ink:    styles.getPropertyValue('--ink').trim() || '#f0ecf2',
+			accent: styles.getPropertyValue('--accent').trim() || '#ff4d9d'
 		};
 	}
 
@@ -124,15 +127,7 @@
 	ctx.drawImage(source, 0, 0);
 	step();
 
-	// The demo samples theme tokens, so it has to be told when they change.
-	if (window.matchMedia) {
-		var dark = window.matchMedia('(prefers-color-scheme: dark)');
-		if (dark.addEventListener) {
-			dark.addEventListener('change', function () {
-				colours = themeColours();
-				drawSource(time);
-				ctx.drawImage(source, 0, 0);
-			});
-		}
-	}
+	/* There is no listener for a theme change here any more: the site has one
+	 * palette and does not follow the operating system, so the tokens sampled
+	 * above cannot change under the demo while it runs. */
 })();
