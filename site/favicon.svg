@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Datamosh">
+	<!-- A macroblock grid with the lower rows displaced: the effect at 32 pixels.
+	     Colours are fixed rather than theme-aware, because a favicon is composited
+	     against browser chrome we cannot see. -->
+	<rect width="32" height="32" fill="#17141a"/>
+
+	<!-- Intact rows. -->
+	<g fill="#ece7ef">
+		<rect x="3"  y="4" width="6" height="6"/>
+		<rect x="11" y="4" width="6" height="6"/>
+		<rect x="19" y="4" width="6" height="6"/>
+	</g>
+
+	<!-- The front: below this line blocks are carried sideways by motion that no
+	     longer matches them. -->
+	<rect x="0" y="12" width="32" height="1.5" fill="#c4006a"/>
+
+	<g fill="#ece7ef" opacity="0.85">
+		<rect x="6"  y="15" width="6" height="6"/>
+		<rect x="15" y="15" width="6" height="6"/>
+		<rect x="24" y="15" width="5" height="6"/>
+	</g>
+
+	<g fill="#ff4d9d" opacity="0.9">
+		<rect x="10" y="24" width="6" height="5"/>
+		<rect x="20" y="24" width="6" height="5"/>
+	</g>
+	<g fill="#ece7ef" opacity="0.35">
+		<rect x="2"  y="24" width="6" height="5"/>
+	</g>
+</svg>

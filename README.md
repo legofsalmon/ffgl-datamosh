@@ -2,11 +2,14 @@
 
 Datamosh effects for Resolume, as FFGL plugins for Windows and macOS.
 
-**📖 [Documentation](https://legofsalmon.github.io/ffgl-datamosh/)** ·
-[Parameters](https://legofsalmon.github.io/ffgl-datamosh/parameters.html) ·
-[Recipes](https://legofsalmon.github.io/ffgl-datamosh/recipes.html) ·
-[Architecture](https://legofsalmon.github.io/ffgl-datamosh/architecture.html) ·
-[Download](https://github.com/legofsalmon/ffgl-datamosh/releases)
+**📖 Documentation** — the site lives in [`site/`](site/) and is deployed to
+Vercel. Until the domain is settled, read it as
+[Parameters](site/parameters.html) ·
+[Recipes](site/recipes.html) ·
+[Architecture](site/architecture.html), or serve it locally (see
+[`site/README.md`](site/README.md)).
+
+**[Download](https://github.com/legofsalmon/ffgl-datamosh/releases)**
 
 | Plugin | Type | Where it shows up |
 | --- | --- | --- |
@@ -32,7 +35,7 @@ parameter instead of an encoder setting.
 Melt, bloom and pixel drag all come out of one pipeline, and a **Damage** group
 exists to get the motion wrong on purpose — because an accurate estimator
 reconstructs the frame, which is correct and far too clean to read as a broken
-codec. [The docs explain the rest.](https://legofsalmon.github.io/ffgl-datamosh/)
+codec. [The docs explain the rest.](site/)
 
 ## Install
 

@@ -48,7 +48,7 @@ appear as one flat list.
 Documentation
 -------------
 
-https://legofsalmon.github.io/ffgl-datamosh/
+https://github.com/legofsalmon/ffgl-datamosh
 
 
 Status
