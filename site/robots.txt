@@ -1,5 +1,4 @@
 User-agent: *
 Allow: /
 
-# No sitemap yet: it needs absolute URLs, so it waits until the domain is
-# settled. Four pages do not need one to be found.
+Sitemap: https://datamosh.letissier.ie/sitemap.xml

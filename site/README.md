@@ -16,6 +16,7 @@ favicon.svg
 og.png              link preview image — generated, see below
 vercel.json         headers and caching
 robots.txt
+sitemap.xml
 tools/make-og.py    regenerates og.png
 ```
 
@@ -45,35 +46,30 @@ opened straight from disk. To exercise it the way Vercel serves it:
 cd site && python3 -m http.server 8000
 ```
 
-## Changing the domain
+## The domain
 
-The site's own domain appears in exactly one block per page — the `canonical`
-and Open Graph tags in `<head>`, marked with a comment. It is currently
-`https://ffgl-datamosh.vercel.app`, which is what Vercel assigns if the project
-is named after the repo.
+`https://datamosh.letissier.ie`.
 
-To change it:
+It appears in exactly one block per page — the `canonical` and Open Graph tags
+in `<head>`, marked with a comment — plus `sitemap.xml` and `robots.txt`. To
+move the site:
 
 ```sh
 cd site
-sed -i 's|https://ffgl-datamosh\.vercel\.app|https://your-domain|g' *.html
+sed -i 's|https://datamosh\.letissier\.ie|https://new-domain|g' *.html *.xml *.txt
 ```
 
-**Until that is correct, shared links will not unfurl with a preview image** —
-`og:image` has to be an absolute URL that resolves, and a wrong one is worse
-than none.
+`og:image` must be an absolute URL that actually resolves or shared links will
+not unfurl with a preview image, so this is worth getting right rather than
+leaving stale.
 
-Three files outside this folder also reference the docs and currently point at
-the GitHub repo rather than the site, because they must never carry a dead link:
+Three files outside this folder also carry the URL:
 
 - `README.md`
 - `packaging/RELEASE-NOTES.md` — becomes the GitHub Release body
 - `packaging/INSTALL-macos.txt` and `packaging/INSTALL-windows.txt` — **copied
   into every release archive**, so whatever URL they carry is frozen for that
-  version the moment it is cut
-
-Point those at the site once the domain resolves, and cut a release so the next
-download carries a working link.
+  version the moment it is cut. Moving the domain means cutting a release.
 
 ## Regenerating the preview image
 
