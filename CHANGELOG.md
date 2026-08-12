@@ -8,6 +8,22 @@ Notable changes to ffgl-datamosh. Format follows
 
 Nothing yet.
 
+## [0.1.1] — 2026-08-12
+
+### Fixed
+
+- The macOS archive nested everything inside a `staging/` folder — the build's
+  own working directory name, appearing in a user-facing download. Unzipping it
+  produced a folder called `staging` rather than the two bundles.
+
+### Added
+
+- The release workflow now inspects the archives it has just produced, checking
+  that the plugins, `INSTALL.txt` and `THIRD-PARTY.txt` are all at the root.
+  Every build step passed on the 0.1.0 archives; only opening one caught it.
+- A release can be cut from the Actions UI with a version input, not only by
+  pushing a tag.
+
 ## [0.1.0] — 2026-08-12
 
 First release. **Pre-release**: everything is verified by an automated test
@@ -92,5 +108,6 @@ Two defects caught in review before release, both of which fail silently:
   Resolume then silently will not load them; the install notes carry the
   `xattr -dr com.apple.quarantine` fix.
 
-[Unreleased]: https://github.com/legofsalmon/ffgl-datamosh/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/legofsalmon/ffgl-datamosh/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/legofsalmon/ffgl-datamosh/releases/tag/v0.1.1
 [0.1.0]: https://github.com/legofsalmon/ffgl-datamosh/releases/tag/v0.1.0
