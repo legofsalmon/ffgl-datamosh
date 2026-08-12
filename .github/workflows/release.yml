@@ -6,8 +6,16 @@ name: release
 on:
   push:
     tags: ['v*']
-  # Lets the packaging be exercised without publishing anything.
+  # Cutting a release from the Actions UI, for when pushing a tag is not
+  # convenient. Supplying a version here publishes exactly as a tag push would;
+  # the Releases API creates the tag against the chosen commit. Leaving it empty
+  # exercises the packaging without publishing anything.
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, e.g. v0.1.0. Leave empty to build only.'
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -164,7 +172,7 @@ jobs:
   publish:
     name: publish release
     needs: [test, windows, macos]
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.version != ''
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -175,17 +183,27 @@ jobs:
           path: artifacts
           merge-multiple: true
 
-      - name: Name the archives after the tag
+      - name: Resolve the version
         run: |
-          version="${GITHUB_REF_NAME}"
+          version="${{ inputs.version }}"
+          if [ -z "$version" ]; then version="${GITHUB_REF_NAME}"; fi
+          echo "VERSION=${version}" >> "$GITHUB_ENV"
+          echo "releasing ${version}"
+
+      - name: Name the archives after the version
+        run: |
           mkdir -p release
-          mv artifacts/datamosh-windows-x64.zip      "release/datamosh-${version}-windows-x64.zip"
-          mv artifacts/datamosh-macos-universal.zip  "release/datamosh-${version}-macos-universal.zip"
+          mv artifacts/datamosh-windows-x64.zip      "release/datamosh-${VERSION}-windows-x64.zip"
+          mv artifacts/datamosh-macos-universal.zip  "release/datamosh-${VERSION}-macos-universal.zip"
           ls -la release
 
       - name: Publish
         uses: softprops/action-gh-release@v2
         with:
+          # Explicit rather than inferred from the ref, so a dispatched release
+          # works too. The Releases API creates the tag if it does not exist.
+          tag_name: ${{ env.VERSION }}
+          target_commitish: ${{ github.sha }}
           files: release/*
           # Marked as a pre-release until the plugin has been run inside
           # Resolume. Everything is verified against synthetic footage in a
