@@ -1,0 +1,51 @@
+Datamosh for Resolume — Windows
+===============================
+
+1. Copy both DLLs into Resolume's plugin folder:
+
+       Documents\Resolume Arena\Extra Effects\
+
+   (Resolume Avenue users: Documents\Resolume Avenue\Extra Effects\)
+
+   Datamosh.dll             the effect
+   DatamoshTransplant.dll   the mixer, appears as a blend mode
+
+   If the folder does not exist, create it. Resolume also lets you point
+   somewhere else in Preferences -> Video.
+
+2. If Windows marked the download as blocked, unblock it.
+
+   Right-click each DLL -> Properties -> tick "Unblock" at the bottom -> OK.
+   Windows adds this to files downloaded from the internet, and it can stop
+   Resolume loading them with no visible error.
+
+3. Restart Resolume.
+
+   Datamosh appears in the Effects list. Drop it on a layer, a group, or the
+   composition — the composition is where it is at its most useful, with Auto
+   Mode set to On Cut.
+
+   Datamosh Transplant appears in a layer's blend-mode dropdown, not the
+   effects list. It applies that layer's motion to the layers below it.
+
+
+Requirements
+------------
+
+Resolume 7.3 or later, 64-bit. Parameter groups need 7.3+; on older versions
+the parameters still work but appear as one flat list.
+
+
+Documentation
+-------------
+
+https://legofsalmon.github.io/ffgl-datamosh/
+
+
+Status
+------
+
+This is a pre-release. Everything in it is verified by an automated test suite
+against synthetic footage, but it has not yet been run inside Resolume itself,
+and the tuning defaults have never seen real video. Treat it as something to
+try, not something to put in a show without rehearsing it first.

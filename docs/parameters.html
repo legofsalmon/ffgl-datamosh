@@ -1,0 +1,477 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Parameter Reference</title>
+<meta name="description" content="Every Datamosh parameter: what it does, what its extremes mean, and which other control it fights with.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="masthead">
+	<div class="masthead-inner">
+		<a class="wordmark" href="index.html">DATA<span>MOSH</span></a>
+		<span class="masthead-meta">Parameter reference</span>
+	</div>
+</header>
+
+<div class="shell">
+
+	<nav class="sidebar" aria-label="Documentation">
+		<ul>
+			<li><a href="index.html">Overview</a></li>
+			<li><a href="parameters.html" aria-current="page">Parameters</a></li>
+			<li><a href="recipes.html">Recipes</a></li>
+			<li><a href="architecture.html">Architecture</a></li>
+			<li class="nav-label">On this page</li>
+			<li><a href="#mosh">Mosh</a></li>
+			<li><a href="#motion">Motion</a></li>
+			<li><a href="#damage">Damage</a></li>
+			<li><a href="#sync">Sync</a></li>
+			<li><a href="#output">Output</a></li>
+			<li><a href="#mixer">Mixer only</a></li>
+		</ul>
+	</nav>
+
+	<main id="main">
+		<div class="prose">
+
+			<p class="eyebrow">Reference</p>
+			<h1>Every parameter</h1>
+			<p class="lede" style="margin-top:14px">
+				Grouped as they appear in Resolume. Each entry says what the control does,
+				what its extremes mean, and what it interacts with &mdash; because several
+				of them can cancel each other out.
+			</p>
+
+			<div class="note accent" style="margin-top:24px">
+				<span class="note-label">Read this first</span>
+				Two controls dominate everything else. <strong>Mosh Amount</strong> decides
+				whether pixels may refresh at all &mdash; at zero the plugin is a
+				passthrough no matter what else is set. <strong>Motion Threshold</strong>
+				then decides <em>which</em> pixels: anything moving slower than the
+				threshold refreshes normally, so a high threshold with a still shot also
+				gives you nothing.
+			</div>
+
+			<h2 id="mosh">Mosh</h2>
+
+			<p>When pixels stop refreshing from the input. This is the I-frame axis.</p>
+
+			<div class="table-wrap">
+			<table>
+				<thead>
+					<tr><th>Parameter</th><th>Range</th><th>Default</th><th>What it does</th></tr>
+				</thead>
+				<tbody>
+					<tr>
+						<td>Style</td>
+						<td>6 presets</td>
+						<td>Custom</td>
+						<td class="desc">
+							Writes a coherent group of parameters in one move: Melt, Bloom,
+							Drag, Liquid or Corrupt. Touching any parameter a style owns flips
+							this back to Custom, so the dropdown never claims something the
+							settings do not say. Selecting a style clears whatever the previous
+							one set rather than layering on top.
+						</td>
+					</tr>
+					<tr>
+						<td>Mosh Amount</td>
+						<td>0 &ndash; 1</td>
+						<td>0</td>
+						<td class="desc">
+							The master gate. At 0 every pixel refreshes from the input and the
+							plugin is a passthrough. At 1 nothing refreshes and the image is
+							carried entirely by motion compensation. Anything in between is a
+							per-frame blend, so mid values decay toward the live image rather
+							than holding half of it.
+						</td>
+					</tr>
+					<tr>
+						<td>Trigger</td>
+						<td>button</td>
+						<td>&mdash;</td>
+						<td class="desc">
+							Starts a timed burst at full mosh, lasting <strong>Burst
+							Length</strong>. Safe to map to MIDI. A burst always produces at
+							least one frame of mosh even if it is shorter than a frame.
+						</td>
+					</tr>
+					<tr>
+						<td>Reset</td>
+						<td>button</td>
+						<td>&mdash;</td>
+						<td class="desc">
+							Forces a keyframe: snaps back to the clean input immediately and
+							clears any running burst. The panic button.
+						</td>
+					</tr>
+					<tr>
+						<td>Auto Mode</td>
+						<td>Manual / On Cut / On Beat</td>
+						<td>Manual</td>
+						<td class="desc">
+							<strong>On Cut</strong> watches the incoming video and fires a burst
+							whenever the shot changes &mdash; put the effect on the composition
+							and every clip change melts by itself, with nothing to trigger.
+							<strong>On Beat</strong> fires on Resolume's clock every
+							<strong>Beat Divisor</strong> beats.
+						</td>
+					</tr>
+					<tr>
+						<td>Cut Sensitivity</td>
+						<td>0 &ndash; 1</td>
+						<td>0.5</td>
+						<td class="desc">
+							How readily On Cut fires. Detection is relative to a running average
+							of how much the picture normally changes, so it adapts to both a
+							still ambient clip and a strobing one. Raise it if cuts are being
+							missed; lower it if fast camera movement is triggering it.
+						</td>
+					</tr>
+					<tr>
+						<td>Burst Length</td>
+						<td>0.05 &ndash; 8 s</td>
+						<td>1.0</td>
+						<td class="desc">
+							How long a triggered burst holds before releasing. The release itself
+							eases out over about a quarter of a second, because an instant drop
+							back to clean reads as a second cut.
+						</td>
+					</tr>
+					<tr>
+						<td>Beat Divisor</td>
+						<td>1 / 2 / 4 / 8 / 16</td>
+						<td>4</td>
+						<td class="desc">
+							Beats between firings in On Beat mode. 4 is once a bar, 16 once every
+							four bars. Needs Resolume's tempo to be running for anything to
+							happen.
+						</td>
+					</tr>
+				</tbody>
+			</table>
+			</div>
+
+			<h2 id="motion">Motion</h2>
+
+			<p>What the estimated vector field does before the warp uses it.</p>
+
+			<div class="table-wrap">
+			<table>
+				<thead>
+					<tr><th>Parameter</th><th>Range</th><th>Default</th><th>What it does</th></tr>
+				</thead>
+				<tbody>
+					<tr>
+						<td>Motion Gain</td>
+						<td>0 &ndash; 4</td>
+						<td>1</td>
+						<td class="desc">
+							Multiplies the estimated vectors. At 1 the warp tracks the real
+							motion, which is accurate and quite clean. Above 1 it overshoots and
+							smears harder. At 0 the warp is an identity copy, which freezes the
+							image without freezing the field.
+						</td>
+					</tr>
+					<tr>
+						<td>Freeze</td>
+						<td>0 &ndash; 1</td>
+						<td>0</td>
+						<td class="desc">
+							Holds the vector field instead of re-estimating it. At 1 the same
+							vectors keep applying every frame regardless of what the footage does
+							&mdash; this is P-frame duplication, and it is what produces the
+							bloom. Note the field has to exist first: turning Freeze on over a
+							still shot holds a field of zeroes and nothing happens.
+						</td>
+					</tr>
+					<tr>
+						<td>Motion Smoothing</td>
+						<td>0 &ndash; 1</td>
+						<td>0.3</td>
+						<td class="desc">
+							Temporal inertia on the field. Higher values make motion take longer
+							to change direction, which lengthens trails and stops the smear
+							flickering when the estimate is uncertain.
+						</td>
+					</tr>
+					<tr>
+						<td>Motion Threshold</td>
+						<td>0 &ndash; 1 (0&ndash;8 px)</td>
+						<td>0.15</td>
+						<td class="desc">
+							How much a region must be moving before it is allowed to mosh.
+							At 0 everything moshes, giving the full melt. Raised, only
+							fast-moving blocks smear and still areas stay sharp &mdash; that is
+							the pixel-drag look. Measured on the estimate before Motion Gain, so
+							turning gain up smears harder without changing what counts as moving.
+						</td>
+					</tr>
+					<tr>
+						<td>Block Size</td>
+						<td>4 / 8 / 16 / 32 px</td>
+						<td>16</td>
+						<td class="desc">
+							The macroblock grid. 16 is what MPEG uses and looks the most
+							familiar. 32 is chunkier and noticeably cheaper; 4 approaches
+							per-pixel flow and costs the most. Also sets the coarsest step
+							<strong>Quantise</strong> can snap to.
+						</td>
+					</tr>
+					<tr>
+						<td>Softness</td>
+						<td>0 &ndash; 1</td>
+						<td>0</td>
+						<td class="desc">
+							Blurs the field and switches the warp from sampling one vector per
+							macroblock to interpolating between them. At 0 you get hard-edged
+							MPEG tearing; at 1, smooth liquid flow. Same estimator either way
+							&mdash; this is the dial between the two aesthetics.
+						</td>
+					</tr>
+					<tr>
+						<td>Pel Snap</td>
+						<td>0 &ndash; 1</td>
+						<td>1</td>
+						<td class="desc">
+							Snaps the displacement to whole pixels. Leave it on unless you want
+							softness: the accumulated image is resampled into itself every
+							frame, and without snapping the interpolation compounds and blurs it
+							to mush within a couple of seconds. Real codecs work in fixed pel
+							units for the same reason.
+						</td>
+					</tr>
+					<tr>
+						<td>Invert Motion</td>
+						<td>off / on</td>
+						<td>off</td>
+						<td class="desc">
+							Reverses the displacement, so the smear runs against the movement in
+							the shot rather than with it. Cheap way to make correct motion look
+							wrong.
+						</td>
+					</tr>
+				</tbody>
+			</table>
+			</div>
+
+			<h2 id="damage">Damage</h2>
+
+			<div class="note accent">
+				<span class="note-label">Why this group exists</span>
+				The estimator is accurate enough that displacing the previous frame by it
+				reproduces the current frame almost exactly. That is correct, and it is
+				also far too clean &mdash; real datamosh looks broken <em>because the
+				vectors are wrong</em>. Everything here makes them wrong on purpose.
+				<strong>Motion Lag</strong> is the strongest and the one to try first.
+			</div>
+
+			<div class="table-wrap" style="margin-top:20px">
+			<table>
+				<thead>
+					<tr><th>Parameter</th><th>Range</th><th>Default</th><th>What it does</th></tr>
+				</thead>
+				<tbody>
+					<tr>
+						<td>Motion Lag</td>
+						<td>0 &ndash; 15 frames</td>
+						<td>0</td>
+						<td class="desc">
+							Applies a vector field from this many frames ago instead of the
+							current one, so motion lands on content it does not belong to. The
+							closest analogue to a decoder working from the wrong reference
+							frames, and the single most effective control for getting away from
+							a clean optical-flow morph. Even 2&ndash;4 frames changes the
+							character completely.
+						</td>
+					</tr>
+					<tr>
+						<td>Block Repeat</td>
+						<td>0 &ndash; 1</td>
+						<td>0</td>
+						<td class="desc">
+							Chance per block of taking a neighbour's content rather than its own
+							&mdash; the look of a block whose data never arrived. Re-rolled every
+							frame, so it shimmers rather than sticking.
+						</td>
+					</tr>
+					<tr>
+						<td>Quantise</td>
+						<td>0 &ndash; 1</td>
+						<td>0</td>
+						<td class="desc">
+							Snaps vectors to a coarse grid, the way a low-bitrate encoder has to.
+							Gives stepped, chunky motion instead of smooth displacement. At full
+							scale the step is half a macroblock, so it interacts strongly with
+							<strong>Block Size</strong>.
+						</td>
+					</tr>
+					<tr>
+						<td>Corruption</td>
+						<td>0 &ndash; 1</td>
+						<td>0</td>
+						<td class="desc">
+							Chance per block of its vector being rotated and rescaled at random
+							&mdash; plausible magnitudes, wrong directions. Reads as damaged data
+							rather than as noise.
+						</td>
+					</tr>
+					<tr>
+						<td>Chroma Drift</td>
+						<td>0 &ndash; 1</td>
+						<td>0</td>
+						<td class="desc">
+							Displaces the red and blue channels by slightly different amounts
+							along the vector, the fringing you get when a block's colour planes
+							disagree about where they came from. Green stays put so the image
+							remains legible.
+						</td>
+					</tr>
+					<tr>
+						<td>Decay</td>
+						<td>0 &ndash; 1</td>
+						<td>0</td>
+						<td class="desc">
+							Bleeds the live image back in even at full mosh, as a half-life:
+							0 holds forever, 1 recovers in a fraction of a second. Being a
+							half-life rather than a per-frame fraction, the same setting behaves
+							identically at 30 and 60&nbsp;fps and through frame-rate dips.
+							Useful as a safety net so a held mosh cannot stay collapsed forever.
+						</td>
+					</tr>
+				</tbody>
+			</table>
+			</div>
+
+			<h2 id="sync">Sync</h2>
+
+			<div class="table-wrap">
+			<table>
+				<thead>
+					<tr><th>Parameter</th><th>Range</th><th>Default</th><th>What it does</th></tr>
+				</thead>
+				<tbody>
+					<tr>
+						<td>Audio</td>
+						<td>FFT input</td>
+						<td>&mdash;</td>
+						<td class="desc">
+							The spectrum Resolume feeds the plugin. Nothing to set; it is the
+							source <strong>Audio Amount</strong> reads from.
+						</td>
+					</tr>
+					<tr>
+						<td>Audio Amount</td>
+						<td>0 &ndash; 1</td>
+						<td>0</td>
+						<td class="desc">
+							How much the audio level adds to Mosh Amount. Adds on top rather than
+							replacing, so a kick pushes an already-moshing image further rather
+							than switching it on from nothing.
+						</td>
+					</tr>
+					<tr>
+						<td>Audio Band</td>
+						<td>Volume / Bass / Mid / High</td>
+						<td>Bass</td>
+						<td class="desc">
+							Which part of the spectrum drives it. Bass tracks the kick; High
+							catches hats and picks out detail; Volume is the whole mix.
+						</td>
+					</tr>
+				</tbody>
+			</table>
+			</div>
+
+			<h2 id="output">Output</h2>
+
+			<div class="table-wrap">
+			<table>
+				<thead>
+					<tr><th>Parameter</th><th>Range</th><th>Default</th><th>What it does</th></tr>
+				</thead>
+				<tbody>
+					<tr>
+						<td>Mix</td>
+						<td>0 &ndash; 1</td>
+						<td>1</td>
+						<td class="desc">
+							Wet/dry against the untouched input. Distinct from Mosh Amount: this
+							crossfades the finished result over the original, while Mosh Amount
+							changes what the result <em>is</em>. Pulling Mix down gives a ghosted
+							double image; pulling Mosh Amount down gives a cleaner one.
+						</td>
+					</tr>
+					<tr>
+						<td>Quality</td>
+						<td>Low / Medium / High / Ultra</td>
+						<td>High</td>
+						<td class="desc">
+							Depth of the motion search: how far it can track fast movement and
+							how precisely. Ultra adds a sub-pixel refinement pass. This is the
+							dial to drop first if a show needs GPU headroom &mdash; lower
+							settings do not break the effect, they just estimate more roughly,
+							which on this effect is often no bad thing.
+						</td>
+					</tr>
+				</tbody>
+			</table>
+			</div>
+
+			<h2 id="mixer">Datamosh Transplant only</h2>
+
+			<p>
+				The mixer build appears in a layer's <strong>blend-mode dropdown</strong>,
+				not the effects list. It takes motion from one input and pixels from the
+				other, so a clip of moving water can be made to drag a completely different
+				image around.
+			</p>
+
+			<div class="table-wrap">
+			<table>
+				<thead>
+					<tr><th>Parameter</th><th>Range</th><th>Default</th><th>What it does</th></tr>
+				</thead>
+				<tbody>
+					<tr>
+						<td>Motion Source</td>
+						<td>This Layer / Layer Below</td>
+						<td>This Layer</td>
+						<td class="desc">
+							Which input supplies the motion; the other supplies the pixels. The
+							default makes the clip you drop the mixer onto the motion clip, and
+							the layers underneath the ones that get dragged. The two inputs do
+							not have to share a resolution.
+						</td>
+					</tr>
+				</tbody>
+			</table>
+			</div>
+
+			<div class="note warn" style="margin-top:22px">
+				<span class="note-label">mixVal does nothing</span>
+				The mixer also shows a slider called <code>mixVal</code>, inherited from
+				the FFGL mixer base class. It is not read &mdash; use <strong>Mix</strong>
+				in the Output group instead. It cannot be renamed or removed without
+				making the plugin fail to load at all;
+				<a href="architecture.html#paraminfo">the reason is worth reading</a> if you
+				write FFGL plugins yourself.
+			</div>
+
+		</div>
+
+		<footer class="page-footer">
+			<span>Datamosh &mdash; FFGL plugins for Resolume</span>
+			<a href="https://github.com/legofsalmon/ffgl-datamosh">github.com/legofsalmon/ffgl-datamosh</a>
+		</footer>
+
+	</main>
+</div>
+
+</body>
+</html>
