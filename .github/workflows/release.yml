@@ -101,6 +101,15 @@ jobs:
 
           Compress-Archive -Path staging/* -DestinationPath datamosh-windows-x64.zip
 
+      - name: Verify the archive layout
+        shell: pwsh
+        run: |
+          $entries = (Get-ChildItem staging).Name
+          foreach ($expected in @('Datamosh.dll','DatamoshTransplant.dll','INSTALL.txt','THIRD-PARTY.txt')) {
+            if ($entries -notcontains $expected) { throw "$expected missing from the archive" }
+          }
+          Write-Host "layout ok: $($entries -join ', ')"
+
       - uses: actions/upload-artifact@v4
         with:
           name: datamosh-windows-x64
@@ -160,8 +169,25 @@ jobs:
             cat external/ffgl/LICENSE.md
           } > staging/THIRD-PARTY.txt
           # ditto rather than zip: it preserves the bundle structure and the
-          # resource forks a .bundle depends on.
-          ditto -c -k --sequesterRsrc --keepParent staging datamosh-macos-universal.zip
+          # resource forks a .bundle depends on. No --keepParent, or the build's
+          # own staging directory name ends up as a folder inside the download.
+          ( cd staging && ditto -c -k --sequesterRsrc . ../datamosh-macos-universal.zip )
+
+      # Checking what actually ships, rather than what went into it. The first
+      # release had every file nested under the staging directory, which the
+      # build steps all passed happily.
+      - name: Verify the archive layout
+        run: |
+          unzip -l datamosh-macos-universal.zip
+          contents=$(unzip -Z1 datamosh-macos-universal.zip)
+          for expected in Datamosh.bundle/ DatamoshTransplant.bundle/ INSTALL.txt THIRD-PARTY.txt; do
+            echo "$contents" | grep -qE "^${expected}" || {
+              echo "::error::$expected is not at the root of the archive"; exit 1; }
+          done
+          # A path segment before the bundle means something wrapped it.
+          echo "$contents" | grep -qE "^[^/]+/.*\.bundle/" && {
+            echo "::error::archive contents are nested inside a folder"; exit 1; }
+          echo "layout ok"
 
       - uses: actions/upload-artifact@v4
         with:
