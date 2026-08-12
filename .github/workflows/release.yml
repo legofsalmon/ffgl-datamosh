@@ -1,0 +1,195 @@
+name: release
+
+# Releases are cut by pushing a tag, so the binaries people download are built
+# from a known commit by the same checks that gate every other build, rather
+# than uploaded by hand from somebody's laptop.
+on:
+  push:
+    tags: ['v*']
+  # Lets the packaging be exercised without publishing anything.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  # The same tests that run on every push, run again against the exact commit
+  # being released. A release is the worst possible place to discover that the
+  # estimator regressed.
+  test:
+    name: test (linux, software GL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install OpenGL development packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libglew-dev libgl1-mesa-dev libegl1-mesa-dev
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  windows:
+    name: package (windows x64)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure
+        run: cmake -S . -B build -A x64 -DDATAMOSH_BUILD_TESTS=OFF
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      # plugMain is the only symbol a host looks up, and it lives in a
+      # translation unit nothing else references. Shipping a binary that lost it
+      # would produce a plugin that loads nowhere and says nothing about why.
+      - name: Verify the plugin entry point is exported
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vsPath  = & $vswhere -latest -products * -property installationPath
+          $dumpbin = Get-ChildItem "$vsPath\VC\Tools\MSVC\*\bin\Hostx64\x64\dumpbin.exe" |
+                     Select-Object -First 1 -ExpandProperty FullName
+          if (-not $dumpbin) { throw "could not locate dumpbin.exe" }
+
+          Get-ChildItem build/src/plugins/Release/*.dll | ForEach-Object {
+            Write-Host "== $($_.Name)"
+            $exports = & $dumpbin /exports $_.FullName
+            if (-not ($exports -match 'plugMain')) { throw "plugMain not exported from $($_.Name)" }
+          }
+
+      # Both the FFGL SDK and GLEW are BSD-style and require their copyright
+      # notice to accompany binary redistribution. Generating the file from the
+      # licences actually in the tree keeps it honest if either dependency moves.
+      - name: Stage the archive
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path staging | Out-Null
+          Copy-Item build/src/plugins/Release/*.dll staging/
+          Copy-Item packaging/INSTALL-windows.txt staging/INSTALL.txt
+          if (Test-Path LICENSE) { Copy-Item LICENSE staging/ }
+
+          $notice  = "These plugins link the following third-party components.`n`n"
+          $notice += "=" * 72 + "`nFreeFrame / FFGL SDK`n" + "=" * 72 + "`n`n"
+          $notice += Get-Content external/ffgl/LICENSE.md -Raw
+          $notice += "`n`n" + "=" * 72 + "`nGLEW - The OpenGL Extension Wrangler Library`n" + "=" * 72 + "`n`n"
+          $notice += Get-Content external/ffgl/deps/glew-2.1.0/LICENSE.txt -Raw
+          Set-Content -Path staging/THIRD-PARTY.txt -Value $notice
+
+          Compress-Archive -Path staging/* -DestinationPath datamosh-windows-x64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: datamosh-windows-x64
+          path: datamosh-windows-x64.zip
+          if-no-files-found: error
+
+  macos:
+    name: package (macos universal)
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure
+        run: >
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+          -DDATAMOSH_BUILD_TESTS=OFF
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      # Resolume 7.11+ runs natively on Apple Silicon and will not load an
+      # x86_64-only plugin, so a single-architecture bundle is a broken release
+      # for half the audience.
+      - name: Verify architectures and entry point
+        run: |
+          for bundle in build/src/plugins/*.bundle; do
+            binary="$bundle/Contents/MacOS/$(basename "$bundle" .bundle)"
+            echo "== $binary"
+            lipo -archs "$binary"
+            lipo -archs "$binary" | grep -q arm64
+            lipo -archs "$binary" | grep -q x86_64
+            nm -gU "$binary" | grep -qw _plugMain
+          done
+
+      - name: Stage the archive
+        run: |
+          mkdir -p staging
+          cp -R build/src/plugins/*.bundle staging/
+          cp packaging/INSTALL-macos.txt staging/INSTALL.txt
+          cp LICENSE staging/ 2>/dev/null || true
+
+          # The FFGL SDK is BSD-style and requires its copyright notice to
+          # accompany binary redistribution. GLEW is not listed here because
+          # macOS links the system OpenGL directly and never pulls it in.
+          {
+            echo "These plugins link the following third-party components."
+            echo
+            printf '=%.0s' {1..72}; echo
+            echo "FreeFrame / FFGL SDK"
+            printf '=%.0s' {1..72}; echo
+            echo
+            cat external/ffgl/LICENSE.md
+          } > staging/THIRD-PARTY.txt
+          # ditto rather than zip: it preserves the bundle structure and the
+          # resource forks a .bundle depends on.
+          ditto -c -k --sequesterRsrc --keepParent staging datamosh-macos-universal.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: datamosh-macos-universal
+          path: datamosh-macos-universal.zip
+          if-no-files-found: error
+
+  publish:
+    name: publish release
+    needs: [test, windows, macos]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Name the archives after the tag
+        run: |
+          version="${GITHUB_REF_NAME}"
+          mkdir -p release
+          mv artifacts/datamosh-windows-x64.zip      "release/datamosh-${version}-windows-x64.zip"
+          mv artifacts/datamosh-macos-universal.zip  "release/datamosh-${version}-macos-universal.zip"
+          ls -la release
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          # Marked as a pre-release until the plugin has been run inside
+          # Resolume. Everything is verified against synthetic footage in a
+          # headless context; none of it is verified against the actual host.
+          prerelease: true
+          generate_release_notes: false
+          body_path: packaging/RELEASE-NOTES.md

@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Datamosh Internals</title>
+<meta name="description" content="How the render pipeline works, and the FFGL SDK traps found building it.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="masthead">
+	<div class="masthead-inner">
+		<a class="wordmark" href="index.html">DATA<span>MOSH</span></a>
+		<span class="masthead-meta">Internals</span>
+	</div>
+</header>
+
+<div class="shell">
+
+	<nav class="sidebar" aria-label="Documentation">
+		<ul>
+			<li><a href="index.html">Overview</a></li>
+			<li><a href="parameters.html">Parameters</a></li>
+			<li><a href="recipes.html">Recipes</a></li>
+			<li><a href="architecture.html" aria-current="page">Architecture</a></li>
+			<li class="nav-label">On this page</li>
+			<li><a href="#constraint">The constraint</a></li>
+			<li><a href="#pipeline">The pass graph</a></li>
+			<li><a href="#estimator">Motion search</a></li>
+			<li><a href="#traps">FFGL traps</a></li>
+			<li><a href="#testing">Testing</a></li>
+		</ul>
+	</nav>
+
+	<main id="main">
+		<div class="prose">
+
+			<p class="eyebrow">For anyone extending it</p>
+			<h1>How it works</h1>
+			<p class="lede" style="margin-top:14px">
+				The render pipeline, and the several ways the FFGL SDK can produce a plugin
+				that fails silently. The second half is worth reading even if you never
+				touch this code.
+			</p>
+
+			<h2 id="constraint">The constraint that shapes everything</h2>
+
+			<p>
+				FFGL&nbsp;2 requires an OpenGL&nbsp;4.1 core context, and macOS caps at
+				exactly 4.1 &mdash; Apple froze OpenGL there. So there are
+				<strong>no compute shaders, no SSBOs, and no image load/store</strong>.
+				Every pass is a fragment shader drawing a full-screen quad into a
+				framebuffer, and anything stateful is a ping-pong pair of textures.
+			</p>
+
+			<p>
+				That rules out the obvious implementation of a motion search, which would
+				be a compute shader with shared memory. What is left is a hierarchical
+				block match rendered at block resolution, one fragment per macroblock,
+				which turns out to be both fast and a good fit for the aesthetic.
+			</p>
+
+			<h2 id="pipeline">The pass graph</h2>
+
+			<p>Per frame, in order:</p>
+
+			<ol class="prose-list">
+				<li>
+					<strong>Ingest</strong> &mdash; copy the host texture into an exact-size
+					<code>RGBA16F</code> buffer, resolving the <code>MaxUV</code>
+					sub-rectangle and un-premultiplying alpha. Doing this once removes two
+					whole classes of bug from every later pass.
+				</li>
+				<li>
+					<strong>Luma + pyramid</strong> &mdash; extract Rec.709 luma and generate
+					mips. The mip chain <em>is</em> the search pyramid, which is why it costs
+					nothing to have.
+				</li>
+				<li>
+					<strong>Motion search</strong> &mdash; hierarchical block matching, coarse
+					to fine. Described below.
+				</li>
+				<li>
+					<strong>Flow post</strong> &mdash; spatial blur, temporal inertia, freeze,
+					quantisation, magnitude clamping and NaN rejection. The output goes into a
+					ring of past fields so <strong>Motion Lag</strong> can reach back.
+				</li>
+				<li>
+					<strong>Control</strong> &mdash; a 1&times;1 state machine deciding the
+					current mosh level from the triggers, the beat clock, the audio level and
+					the cut detector.
+				</li>
+				<li>
+					<strong>Mosh</strong> &mdash; displace the accumulation buffer along the
+					field and decide, per pixel, whether it may refresh from the live frame.
+					This one decision is the entire effect.
+				</li>
+				<li>
+					<strong>Composite</strong> &mdash; wet/dry, re-premultiply, clamp, draw
+					into the host's framebuffer.
+				</li>
+			</ol>
+
+			<p>
+				About 61&nbsp;MB of buffers per instance at 1080p. Most passes run at block
+				resolution, so the full-resolution cost is dominated by ingest, mosh and
+				composite.
+			</p>
+
+			<div class="note good">
+				<span class="note-label">No readback, anywhere</span>
+				The cut detector needs a whole-frame statistic, which is the obvious place
+				to reach for <code>glReadPixels</code>. It does not: a GPU&rarr;CPU sync
+				mid-frame stalls the pipeline, and one stalled frame is a visible hitch on
+				stage. The frame difference is reduced through a mip chain to a single texel
+				and consumed on the GPU by the control pass, which never blocks.
+			</div>
+
+			<h2 id="estimator">Motion search</h2>
+
+			<p>
+				One fragment per macroblock, run once per pyramid level from coarse to fine.
+				Each level reads the level above as its opening guess &mdash; bilinear
+				magnification upsamples it for free &mdash; and searches a small window
+				around it.
+			</p>
+
+			<p>Candidates tested per block:</p>
+			<ul class="prose-list">
+				<li>The coarser level's vector for this block.</li>
+				<li>The four neighbouring blocks' vectors. Objects are larger than one
+					macroblock, so a neighbour has usually already found the right answer;
+					this buys far more quality per texture read than widening the window.</li>
+				<li>The zero vector, always &mdash; without it a static region gets dragged
+					off by a marginally better match in noise.</li>
+				<li>A 3&times;3 or 5&times;5 local window around the prediction.</li>
+			</ul>
+
+			<p>
+				Cost is mean absolute difference over a 4&times;4 sample lattice inside the
+				block, plus a regularisation term charged <em>in pixels</em>: straying from
+				the neighbours' consensus costs something, and so does motion at all. That
+				term is what makes the field coherent rather than confetti, and charging it
+				in pixels means the tuning holds at any resolution.
+			</p>
+
+			<p>
+				The first iteration of each frame seeds from the previous frame's finished
+				field. Motion is continuous, so yesterday's answer is a far better opening
+				guess than zero, and it costs nothing.
+			</p>
+
+			<div class="note accent">
+				<span class="note-label">The accuracy problem</span>
+				There is a test, <code>MotionCompensationReconstructsPureTranslation</code>,
+				asserting that displacing the previous frame by the estimate reproduces the
+				current frame. It passes &mdash; which is the correct result and also the
+				reason the Damage group exists. Real datamosh looks broken because the
+				vectors are wrong, so a good estimator has to be sabotaged deliberately
+				rather than left to be accurate.
+			</div>
+
+			<h2 id="traps">FFGL traps worth knowing</h2>
+
+			<p>
+				Each of these produces a plugin that fails with no error message anywhere.
+				They cost real time to find.
+			</p>
+
+			<h3 id="paraminfo"><code>SetParamInfo</code> appends, it does not update</h3>
+			<p>
+				There is no API to rename an inherited parameter or change its declared
+				default. Calling <code>SetParamInfo</code> for an index that already exists
+				<em>adds another record</em>. <code>GetNumParams</code> then overreports,
+				and <code>instantiateGL</code> &mdash; which writes every index's default
+				before handing the plugin to the host &mdash; hits the phantom index, gets
+				<code>FF_FAIL</code>, and destroys the instance.
+			</p>
+			<p>
+				The plugin simply never loads. Nothing is logged. This is why the mixer
+				leaves its inherited <code>mixVal</code> slider alone rather than renaming
+				it to something useful, and why there is a test that replays the host's
+				default-initialisation walk against both plugins.
+			</p>
+
+			<h3>The SDK must be an object library, not a static one</h3>
+			<p>
+				<code>plugMain</code> is the only symbol a host looks up, and it lives in a
+				translation unit nothing else references &mdash; the
+				<code>g_CurrPluginInfo</code> global it uses is defined in a different file.
+				Out of a static archive the linker therefore discards that object entirely
+				and produces a plugin with no entry point.
+			</p>
+			<p>
+				An <code>OBJECT</code> library links every object unconditionally on all
+				three toolchains, with no <code>--whole-archive</code> juggling. This is
+				also why the SDK's own project files compile those sources straight into
+				each plugin. CI checks the export on every platform now.
+			</p>
+
+			<h3><code>ffglex::FFGLFBO</code> leaks its colour texture</h3>
+			<p>
+				Its <code>Release()</code> has a copy-paste error: the second guard re-tests
+				<code>depthBufferID</code> instead of <code>colorTextureID</code>, so the
+				colour texture is never deleted. A full-resolution texture leaks on every
+				resize. This project uses its own <code>RenderTarget</code>, which also
+				drops the depth buffer none of these passes need.
+			</p>
+
+			<h3><code>ScopedFBOBinding</code> does not restore the viewport</h3>
+			<p>
+				It restores the framebuffer binding only. Since our passes render into
+				reduced-size targets, returning to the host without putting the viewport
+				back makes the host draw into a corner of its own framebuffer.
+				<code>ScopedViewport</code> covers the gap.
+			</p>
+
+			<h3>Whole-pixel snapping is not optional</h3>
+			<p>
+				The accumulation buffer is resampled into itself every frame. With plain
+				bilinear filtering the interpolation compounds and the image blurs to mush
+				within a second or two. Snapping the displacement to whole pixels keeps it
+				crisp &mdash; and is what real codecs do, for the same reason.
+			</p>
+
+			<h2 id="testing">Testing a thing you cannot look at</h2>
+
+			<p>
+				32 tests run against a real headless OpenGL&nbsp;4.1 core context, created
+				through EGL on a software rasteriser so they work on a CI machine with no
+				GPU and no display server. They drive the pipeline exactly as Resolume does.
+			</p>
+
+			<p>
+				The inputs are synthetic clips with <strong>known ground truth</strong>: a
+				pattern translating at a known velocity must produce the matching vectors.
+				That is the only way to regression-test a motion estimator &mdash; "does it
+				look right" is not a test, and by the time it looks wrong you have no idea
+				which of six passes did it.
+			</p>
+
+			<p>Also covered:</p>
+			<ul class="prose-list">
+				<li>Motion compensation reconstructing a translating frame, which checks the
+					vector sign, warp direction, pel snapping and block-centre lookup all at
+					once &mdash; get any one backwards and the error doubles instead of
+					cancelling.</li>
+				<li>Cut detection, beat divisors at every setting, freeze, and motion lag
+					against a recorded field history.</li>
+				<li>Decay being identical over one second whether it arrives as 30 steps or
+					60, which is the whole point of expressing it as a half-life.</li>
+				<li>Resize storms, GL object lifetime, and that no NaN can reach the feedback
+					buffers &mdash; one would propagate forever and only a host restart would
+					clear it.</li>
+				<li>The plugin layer separately: the frame gate, trigger handling, parameter
+					mapping and mixer input selection.</li>
+			</ul>
+
+			<pre style="margin-top:18px"><code>cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
+ctest --test-dir build --output-on-failure
+
+./build/tests/datamosh_tests --profile   # per-pass GPU timing</code></pre>
+
+			<div class="note warn" style="margin-top:22px">
+				<span class="note-label">Still unverified</span>
+				None of this has been run inside Resolume. In particular it is not confirmed
+				that Resolume delivers <code>SetTime</code> to effects &mdash; the
+				frame-advance gate assumes it does and falls back to advancing on every call
+				if not, so the failure mode is a wrong rate rather than a frozen effect. The
+				search tuning constants have never seen real footage either.
+			</div>
+
+		</div>
+
+		<footer class="page-footer">
+			<span>Datamosh &mdash; FFGL plugins for Resolume</span>
+			<a href="https://github.com/legofsalmon/ffgl-datamosh">github.com/legofsalmon/ffgl-datamosh</a>
+		</footer>
+
+	</main>
+</div>
+
+</body>
+</html>

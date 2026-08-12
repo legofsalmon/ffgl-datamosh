@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Datamosh Recipes</title>
+<meta name="description" content="Settings that produce each datamosh look on purpose, and the live workflows worth setting up before a set.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="masthead">
+	<div class="masthead-inner">
+		<a class="wordmark" href="index.html">DATA<span>MOSH</span></a>
+		<span class="masthead-meta">Recipes</span>
+	</div>
+</header>
+
+<div class="shell">
+
+	<nav class="sidebar" aria-label="Documentation">
+		<ul>
+			<li><a href="index.html">Overview</a></li>
+			<li><a href="parameters.html">Parameters</a></li>
+			<li><a href="recipes.html" aria-current="page">Recipes</a></li>
+			<li><a href="architecture.html">Architecture</a></li>
+			<li class="nav-label">On this page</li>
+			<li><a href="#looks">The looks</a></li>
+			<li><a href="#workflows">Live workflows</a></li>
+			<li><a href="#nothing">Nothing is happening</a></li>
+		</ul>
+	</nav>
+
+	<main id="main">
+		<div class="prose">
+
+			<p class="eyebrow">Getting the look you meant</p>
+			<h1>Recipes</h1>
+			<p class="lede" style="margin-top:14px">
+				Each of these is available as a <strong>Style</strong> preset. The settings
+				are listed so you can see what the preset actually changed, and so you know
+				which dial to nudge afterwards.
+			</p>
+
+			<h2 id="looks">The looks</h2>
+
+			<h3>Melt &mdash; one shot dissolving into the next</h3>
+			<p>
+				The classic transition. Pixels stop refreshing while motion carries on, so
+				the outgoing shot is dragged along by movement that now belongs to the
+				incoming one.
+			</p>
+			<pre><code>Mosh Amount      1.0
+Motion Threshold 0.0     &larr; everything moshes, not just fast areas
+Motion Gain      1.2
+Motion Smoothing 0.4
+Softness         0.3
+Motion Lag       2       &larr; enough mismatch to stop it looking like a morph</code></pre>
+			<p>
+				Trigger it by hand, or set <strong>Auto Mode</strong> to
+				<strong>On&nbsp;Cut</strong> and let it fire itself.
+			</p>
+
+			<h3>Bloom &mdash; motion piling up on itself</h3>
+			<p>
+				Freeze the field and the same vectors keep applying every frame. The image
+				stops being a picture and becomes flow.
+			</p>
+			<pre><code>Mosh Amount      1.0
+Freeze           1.0     &larr; the whole trick
+Motion Gain      1.5
+Motion Smoothing 0.6
+Motion Threshold 0.0
+Decay            0.1     &larr; so it recovers instead of collapsing forever</code></pre>
+			<div class="note">
+				<span class="note-label">Order matters</span>
+				Freeze holds whatever field exists <em>at the moment you enable it</em>. Turn
+				it on during a still shot and you have frozen a field of zeroes, and nothing
+				will happen. Let some movement play first, then freeze.
+			</div>
+
+			<h3>Pixel drag &mdash; trails without collapse</h3>
+			<p>
+				Only what is moving fast smears. Still areas stay sharp, so the shot remains
+				readable and the effect reads as motion trails rather than as breakage.
+			</p>
+			<pre><code>Mosh Amount      1.0
+Motion Threshold 0.5     &larr; the control that defines this look
+Motion Gain      2.0
+Motion Smoothing 0.2
+Block Size       32      &larr; chunky, and cheap</code></pre>
+
+			<h3>Liquid &mdash; smooth, no visible blocks</h3>
+			<p>
+				The same estimator with the field blurred and the snapping off. Closer to an
+				optical-flow morph than to a codec, which is sometimes exactly what a track
+				wants.
+			</p>
+			<pre><code>Mosh Amount      1.0
+Softness         1.0     &larr; interpolate between block vectors
+Pel Snap         0.0     &larr; sub-pixel, so it stays soft
+Motion Smoothing 0.5
+Block Size       8</code></pre>
+
+			<h3>Corrupt &mdash; everything wrong at once</h3>
+			<p>
+				Every damage control engaged. The furthest from clean motion compensation,
+				and the closest to a genuinely broken file.
+			</p>
+			<pre><code>Mosh Amount      1.0
+Motion Threshold 0.1
+Motion Lag       4
+Corruption       0.4
+Block Repeat     0.3
+Quantise         0.7
+Chroma Drift     0.4</code></pre>
+
+			<h2 id="workflows">Live workflows</h2>
+
+			<h3>Auto-melt every cut, hands off</h3>
+			<p>
+				The setup worth doing first, because it needs nothing from you once it is
+				running.
+			</p>
+			<ol class="prose-list">
+				<li>Put <strong>Datamosh</strong> on the composition, not on a layer &mdash;
+					it needs to see the finished image so it can notice clip changes.</li>
+				<li><strong>Auto Mode &rarr; On Cut.</strong></li>
+				<li>Leave <strong>Mosh Amount</strong> at 0. The cut detector supplies its
+					own burst; Amount is for holding a mosh open by hand on top of that.</li>
+				<li>Set <strong>Burst Length</strong> to taste &mdash; around 0.5&nbsp;s
+					reads as a stutter, 2&nbsp;s as a full dissolve.</li>
+			</ol>
+			<p>
+				Every clip you fire now melts into the last one. If it fires on fast camera
+				moves as well as cuts, lower <strong>Cut Sensitivity</strong>.
+			</p>
+
+			<h3>Motion transplant between two clips</h3>
+			<p>
+				This is what the mixer build is for, and it is the closest the plugin gets
+				to what datamoshing originally was: one shot's motion spliced onto another
+				shot's pixels.
+			</p>
+			<ol class="prose-list">
+				<li>Put the clip you want the <em>movement</em> from on the upper layer.</li>
+				<li>Set that layer's <strong>blend mode</strong> to <strong>Datamosh
+					Transplant</strong>. It is in the blend-mode dropdown, not the effects
+					list.</li>
+				<li>Leave <strong>Motion Source</strong> on <strong>This Layer</strong>. The
+					layers underneath now supply the pixels.</li>
+				<li>Raise <strong>Mosh Amount</strong>.</li>
+			</ol>
+			<p>
+				Clips with strong, coherent, full-frame movement work best as the motion
+				source &mdash; water, smoke, crowds, a whip pan. A locked-off shot has
+				nothing to donate.
+			</p>
+
+			<h3>Beat-synced stutter</h3>
+			<ol class="prose-list">
+				<li><strong>Auto Mode &rarr; On Beat</strong>, with Resolume's tempo
+					running.</li>
+				<li><strong>Beat Divisor</strong> 4 for once a bar, 1 for every beat.</li>
+				<li>Short <strong>Burst Length</strong> &mdash; 0.1&nbsp;to&nbsp;0.3&nbsp;s
+					so it punctuates rather than smothers.</li>
+			</ol>
+
+			<h3>Audio-reactive pressure</h3>
+			<p>
+				Rather than switching on and off, let the mix push an already-moshing image
+				further.
+			</p>
+			<ol class="prose-list">
+				<li><strong>Audio Band &rarr; Bass</strong> to ride the kick.</li>
+				<li><strong>Audio Amount</strong> around 0.3&ndash;0.5.</li>
+				<li>Set <strong>Mosh Amount</strong> to a low baseline, 0.2 or so. Audio adds
+					on top, so the baseline is what it pushes <em>from</em>.</li>
+			</ol>
+
+			<h2 id="nothing">When nothing is happening</h2>
+
+			<p>Almost always one of these, roughly in order of likelihood.</p>
+
+			<ul class="prose-list">
+				<li>
+					<strong>Mosh Amount is 0 and Auto Mode is Manual.</strong> The plugin is
+					a passthrough by design until something opens the gate.
+				</li>
+				<li>
+					<strong>Motion Threshold is above what the shot is doing.</strong> Nothing
+					is moving fast enough to qualify. Drop it to 0 to confirm.
+				</li>
+				<li>
+					<strong>The shot is not moving.</strong> The whole effect is built on
+					estimated motion; a locked-off static frame has none to work with.
+				</li>
+				<li>
+					<strong>Freeze was enabled before there was a field.</strong> It is
+					holding zeroes. Set Freeze to 0, let movement play, then re-enable.
+				</li>
+				<li>
+					<strong>Mix is down.</strong> It crossfades the whole result back to the
+					original.
+				</li>
+				<li>
+					<strong>On macOS, the plugin never appeared at all.</strong> That is
+					Gatekeeper quarantining an unsigned bundle, not a settings problem
+					&mdash; see the <a href="index.html#main">install notes</a>.
+				</li>
+			</ul>
+
+			<div class="note warn" style="margin-top:24px">
+				<span class="note-label">If it looks too smooth</span>
+				A morph rather than a mosh means the motion estimate is doing its job
+				<em>too well</em>. Raise <strong>Motion Lag</strong> first &mdash; two to
+				four frames is usually enough. Then drop <strong>Quality</strong>, raise
+				<strong>Block Size</strong>, or reach into the
+				<a href="parameters.html#damage">Damage</a> group.
+			</div>
+
+		</div>
+
+		<footer class="page-footer">
+			<span>Datamosh &mdash; FFGL plugins for Resolume</span>
+			<a href="https://github.com/legofsalmon/ffgl-datamosh">github.com/legofsalmon/ffgl-datamosh</a>
+		</footer>
+
+	</main>
+</div>
+
+</body>
+</html>
