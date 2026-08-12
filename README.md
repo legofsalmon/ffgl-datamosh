@@ -88,6 +88,11 @@ GitHub Release with the archives attached.
 git tag v0.2.0 && git push origin v0.2.0
 ```
 
+A release can also be cut from **Actions → release → Run workflow** by entering
+the version there; the Releases API creates the tag against the chosen commit.
+Running it with the version left empty builds and packages without publishing,
+which is the way to test a change to the packaging itself.
+
 ## Status — not yet validated in Resolume
 
 Everything is verified by the test suite; none of it is verified against the
