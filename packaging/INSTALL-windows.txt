@@ -25,7 +25,7 @@ Datamosh for Resolume — Windows
    composition — the composition is where it is at its most useful, with Auto
    Mode set to On Cut.
 
-   Datamosh Transplant appears in a layer's blend-mode dropdown, not the
+   Mosh Transplant appears in a layer's blend-mode dropdown, not the
    effects list. It applies that layer's motion to the layers below it.
 
 

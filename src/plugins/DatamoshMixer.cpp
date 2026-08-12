@@ -15,10 +15,21 @@ static CFFGLThumbnailInfo ThumbnailInfo(
 	datamosh::thumbnail::Generate( 1 )
 );
 
+// The name shown in Resolume's blend-mode list. PluginInfoStruct::PluginName is
+// char[16] and CFFGLPluginInfo's copy loop stops after 16 bytes without writing
+// a terminator, so a name of 16 characters or more runs straight into
+// PluginType and a host calling strlen reads past the field. "Datamosh
+// Transplant" is 19 and was being shown as "Datamosh Transpl" followed by
+// PluginType's low byte. Fifteen characters is the real limit, and a compile
+// error is a better place to find that out than a dropdown.
+static constexpr char PLUGIN_NAME[] = "Mosh Transplant";
+static_assert( sizeof( PLUGIN_NAME ) <= 16,
+               "FFGL PluginName is char[16] and is not null-terminated when full" );
+
 static CFFGLPluginInfo PluginInfo(
 	PluginFactory< datamosh::DatamoshMixer >,
 	"DMMX",               // unique ID, maximum four characters
-	"Datamosh Transplant",// name shown in Resolume's blend-mode list
+	PLUGIN_NAME,
 	2,                    // FFGL API major
 	1,                    // FFGL API minor
 	0,                    // plugin major

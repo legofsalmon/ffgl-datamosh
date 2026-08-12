@@ -85,6 +85,11 @@ protected:
 	void SnapshotStyleValues();
 	/// Position of `index` within styleManagedIndices, or -1.
 	int  StyleManagedSlot( unsigned int index ) const;
+	/// The selected band's level, read off the SDK's analyser. Its own method
+	/// rather than inline in ProcessOpenGL so a test can reach it: this value
+	/// never passes through ReadParams, which is how it went unnoticed that the
+	/// whole audio path was returning zero.
+	float AudioLevel();
 
 	static constexpr unsigned int NO_PARAM = 0xFFFFFFFFu;
 
@@ -190,6 +195,11 @@ void DatamoshPlugin< HostBase >::DeclareCommonParams()
 	// --- sync ---
 	audioParam = ParamFFT::Create( "Audio" );
 	AddGrouped( "Sync", audioParam );
+	// ffglqs::Audio starts with gain 0 and every bin is fft[i] * fft[i] * gain,
+	// so without this line every band reads exactly zero forever and the audio
+	// parameters are inert with no symptom other than nothing happening. The
+	// argument is decibels — 0 dB is unity, not silence.
+	this->audioParams[ audioParam ].SetGain( 0.0f );
 	AddGrouped( "Sync", ParamRange::Create( "Audio Amount", 0.0f, Range( 0.0f, 1.0f ) ) );
 	AddGrouped( "Sync", ParamOption::Create( "Audio Band",
 	                                         { { "Volume", 0.0f }, { "Bass", 1.0f }, { "Mid", 2.0f }, { "High", 3.0f } },
@@ -235,6 +245,22 @@ int DatamoshPlugin< HostBase >::StyleManagedSlot( unsigned int index ) const
 			return static_cast< int >( slot );
 	}
 	return -1;
+}
+
+template< typename HostBase >
+float DatamoshPlugin< HostBase >::AudioLevel()
+{
+	if( !audioParam )
+		return 0.0f;
+
+	ffglqs::Audio& audio = this->audioParams[ audioParam ];
+	switch( OptionValue( "Audio Band" ) )
+	{
+	case 1:  return audio.GetBass();
+	case 2:  return audio.GetMed();
+	case 3:  return audio.GetHigh();
+	default: return audio.GetVolume();
+	}
 }
 
 template< typename HostBase >
@@ -507,17 +533,7 @@ FFResult DatamoshPlugin< HostBase >::ProcessOpenGL( ProcessOpenGLStruct* pGL )
 	pendingDeltaTime += std::min( 0.1f, std::max( 1.0f / 240.0f, this->deltaTime ) );
 	params.frame = frameCounter;
 
-	if( audioParam )
-	{
-		const ffglqs::Audio& audio = this->audioParams[ audioParam ];
-		switch( OptionValue( "Audio Band" ) )
-		{
-		case 1:  params.audioLevel = const_cast< ffglqs::Audio& >( audio ).GetBass(); break;
-		case 2:  params.audioLevel = const_cast< ffglqs::Audio& >( audio ).GetMed(); break;
-		case 3:  params.audioLevel = const_cast< ffglqs::Audio& >( audio ).GetHigh(); break;
-		default: params.audioLevel = const_cast< ffglqs::Audio& >( audio ).GetVolume(); break;
-		}
-	}
+	params.audioLevel = AudioLevel();
 
 	// Advance the simulation at most once per host frame. Resolume can call a
 	// plugin more than once for the same moment in time, and a feedback effect

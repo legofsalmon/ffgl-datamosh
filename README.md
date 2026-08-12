@@ -13,7 +13,7 @@ The site's source is in [`site/`](site/) and deploys to Vercel from there.
 | Plugin | Type | Where it shows up |
 | --- | --- | --- |
 | **Datamosh** | `FF_EFFECT`, `DMSH` | Effects list. Drop it on a layer, a group, or the composition. |
-| **Datamosh Transplant** | `FF_MIXER`, `DMMX` | A layer's blend-mode dropdown. Applies that layer's motion to the layers below. |
+| **Mosh Transplant** | `FF_MIXER`, `DMMX` | A layer's blend-mode dropdown. Applies that layer's motion to the layers below. |
 
 ## Why it simulates rather than corrupts
 
@@ -67,7 +67,7 @@ Install straight into Resolume with
 ## Test
 
 ```sh
-ctest --test-dir build --output-on-failure   # 32 tests
+ctest --test-dir build --output-on-failure   # 34 tests
 ./build/tests/datamosh_tests --profile        # per-pass GPU timing
 ```
 
@@ -98,23 +98,32 @@ which is the way to test a change to the packaging itself.
 ## Status — not yet validated in Resolume
 
 Everything is verified by the test suite; none of it is verified against the
-actual host. The checklist that still needs a machine with Resolume on it:
+actual host, and the tuning defaults have never seen real video.
 
-- [ ] Both plugins appear and load, with their thumbnails
-- [ ] Parameters render as collapsible groups (needs Resolume 7.3+)
-- [ ] Style presets move the sliders in the panel, and survive pressing Trigger
-- [ ] Find out what Resolume does with the mixer's inherited `mixVal` slider
-- [ ] Composition resolution change while running
-- [ ] Clip cut, layer bypass, rapid parameter scrubbing
-- [ ] Two instances stacked; mixer appears in the blend-mode dropdown
-- [ ] No VRAM growth over a 30-minute soak
-- [ ] Confirm Resolume delivers `SetTime` to effects — the frame-advance gate in
-      `src/plugins/DatamoshPlugin.h` assumes it does and falls back to advancing
-      every call if not
-- [ ] `--profile` on real hardware, then tune `SEARCH_LAMBDA`,
-      `SEARCH_ZERO_BIAS`, `THRESHOLD_PIXEL_RANGE` (`src/core/MoshPipeline.cpp`)
-      and the cut-sensitivity curve (`src/core/shaders/Control.glsl`) against
-      footage
+**[VALIDATING.md](VALIDATING.md)** is the procedure for closing that gap: a
+ten-minute smoke test, a triage table for when it fails, and a full pass. It is
+written around one property of this codebase — when the pipeline cannot run,
+`Passthrough` emits a pixel-exact copy of the input, so **a completely dead
+plugin looks exactly like a correctly-bypassing effect**. Every check there is
+built to tell working apart from inert rather than from black.
+
+Start with the read-only diagnostics collector, which answers "are the files
+where Resolume looks, are they loadable, did Resolume look, did Resolume load
+them, did the parameters register" without your having to know what matters:
+
+```sh
+bash tools/collect-datamosh-diagnostics.sh | tee ~/Desktop/datamosh-diag.txt   # macOS
+powershell -ExecutionPolicy Bypass -File .\tools\collect-datamosh-diagnostics.ps1   # Windows
+```
+
+The open questions it exists to settle: whether Resolume delivers `SetTime` to
+effects (the frame-advance gate in `src/plugins/DatamoshPlugin.h` assumes it does
+and falls back to advancing every call if not), whether the host sends real
+parameter ranges or normalised 0..1, what it does with the mixer's inherited
+`mixVal`, and whether every shader survives a stricter GLSL compiler than Mesa's.
+Then `--profile` on real hardware, and tune `SEARCH_LAMBDA`, `SEARCH_ZERO_BIAS`
+and `THRESHOLD_PIXEL_RANGE` (`src/core/MoshPipeline.cpp`) plus the cut-sensitivity
+curve (`src/core/shaders/Control.glsl`) against footage.
 
 ## Licence
 
