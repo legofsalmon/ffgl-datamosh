@@ -12,6 +12,7 @@ jobs:
   test:
     name: test (linux, software GL)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -45,6 +46,7 @@ jobs:
   windows:
     name: plugins (windows)
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -60,8 +62,18 @@ jobs:
 
       - name: Verify the plugin entry point is exported
         shell: pwsh
+        timeout-minutes: 5
         run: |
-          $dumpbin = (Get-ChildItem -Path "${env:ProgramFiles(x86)}\Microsoft Visual Studio","${env:ProgramFiles}\Microsoft Visual Studio" -Filter dumpbin.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
+          # vswhere ships with every Visual Studio installer and is at a fixed
+          # path, so this stays a bounded lookup. Searching Program Files
+          # recursively for dumpbin.exe instead takes many minutes.
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vsPath  = & $vswhere -latest -products * -property installationPath
+          $dumpbin = Get-ChildItem "$vsPath\VC\Tools\MSVC\*\bin\Hostx64\x64\dumpbin.exe" |
+                     Select-Object -First 1 -ExpandProperty FullName
+          if (-not $dumpbin) { throw "could not locate dumpbin.exe" }
+          Write-Host "using $dumpbin"
+
           Get-ChildItem build/src/plugins/Release/*.dll | ForEach-Object {
             Write-Host "== $($_.Name)"
             $exports = & $dumpbin /exports $_.FullName
@@ -77,6 +89,7 @@ jobs:
   macos:
     name: plugins (macos universal)
     runs-on: macos-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
