@@ -1,6 +1,22 @@
 Datamosh for Resolume — macOS
 =============================
 
+Use the installer
+-----------------
+
+Download datamosh-<version>-macos.pkg from the releases page, double-click it,
+and follow the prompts. It is signed and notarised by Apple, so there is no
+security warning and nothing to type into a Terminal.
+
+It installs into your own Documents folder, so no administrator password is
+needed. Tick Arena, Avenue or both.
+
+Quit Resolume first — it scans for plugins only when it starts.
+
+
+This zip, if you would rather copy files by hand
+------------------------------------------------
+
 1. Copy both bundles into Resolume's plugin folder:
 
        ~/Documents/Resolume Arena/Extra Effects/
@@ -10,20 +26,20 @@ Datamosh for Resolume — macOS
    Datamosh.bundle             the effect
    DatamoshTransplant.bundle   the mixer, appears as a blend mode
 
-2. IMPORTANT — clear the quarantine flag.
+2. Clear the quarantine flag.
 
-   These bundles are not code-signed or notarised. macOS attaches a quarantine
-   attribute to anything downloaded from a browser, and Gatekeeper will then
-   stop Resolume loading them. There is no error message: the plugins simply do
-   not appear in the effects list, which looks identical to a failed install.
+   macOS attaches a quarantine attribute to anything extracted from a
+   downloaded zip, and will then refuse to let Resolume load the plugins.
+   There is no error message: they simply do not appear, which looks
+   identical to a failed install.
 
    In Terminal:
 
        xattr -dr com.apple.quarantine ~/Documents/Resolume\ Arena/Extra\ Effects/Datamosh.bundle
        xattr -dr com.apple.quarantine ~/Documents/Resolume\ Arena/Extra\ Effects/DatamoshTransplant.bundle
 
-   Building from source instead avoids this entirely, since a locally built
-   bundle is never quarantined.
+   The installer exists precisely to avoid this step — package payloads are
+   not quarantined. Building from source also avoids it.
 
 3. Restart Resolume.
 

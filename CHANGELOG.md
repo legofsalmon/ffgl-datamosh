@@ -6,6 +6,10 @@ Notable changes to ffgl-datamosh. Format follows
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.1.5] — 2026-08-13
+
 ### Removed
 
 - **`Audio Band` loses Mid and High.** They read zero. `ffglqs::Audio` splits the
@@ -266,7 +270,8 @@ Two defects caught in review before release, both of which fail silently:
   Resolume then silently will not load them; the install notes carry the
   `xattr -dr com.apple.quarantine` fix.
 
-[Unreleased]: https://github.com/legofsalmon/ffgl-datamosh/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/legofsalmon/ffgl-datamosh/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/legofsalmon/ffgl-datamosh/releases/tag/v0.1.5
 [0.1.4]: https://github.com/legofsalmon/ffgl-datamosh/releases/tag/v0.1.4
 [0.1.3]: https://github.com/legofsalmon/ffgl-datamosh/releases/tag/0.1.3
 [0.1.2]: https://github.com/legofsalmon/ffgl-datamosh/releases/tag/v0.1.2
