@@ -470,9 +470,9 @@ static void FeedAudio( TestableEffect& plugin, float magnitude )
 
 TEST( EveryAudioBandRespondsToHostFFTData )
 {
-	static const char* const BANDS[] = { "Volume", "Bass", "Mid", "High" };
+	static const char* const BANDS[] = { "Volume", "Bass" };
 
-	for( int band = 0; band < 4; ++band )
+	for( int band = 0; band < 2; ++band )
 	{
 		TestableEffect plugin;
 		plugin.SetFloatParameter( plugin.ParamIndex( "Audio Band" ), (float)band );
@@ -482,8 +482,8 @@ TEST( EveryAudioBandRespondsToHostFFTData )
 		CHECK_NEAR( plugin.AudioLevel(), 0.0, 1e-4 );
 
 		// A full-scale spectrum has to move it. This is the assertion that fails
-		// when the analyser's gain is left at zero — and it fails for all four
-		// bands at once, which is the signature of a gain problem rather than a
+		// when the analyser's gain is left at zero — and it fails for both bands
+		// at once, which is the signature of a gain problem rather than a
 		// band-selection one.
 		FeedAudio( plugin, 1.0f );
 		const float loud = plugin.AudioLevel();
@@ -495,9 +495,10 @@ TEST( EveryAudioBandRespondsToHostFFTData )
 
 TEST( AudioBandSelectionPicksDifferentPartsOfTheSpectrum )
 {
-	// Energy only in the bottom third. Bass must see it and High must not, which
-	// is what distinguishes a working band selector from one that happens to
-	// return the same number four times.
+	// Energy only in the bottom quarter. Bass averages over the bottom third and
+	// Volume over the whole buffer, so with the signal down low Bass must read
+	// higher — which is what distinguishes a working band selector from one that
+	// happens to return the same number whatever is selected.
 	auto levelFor = []( int band ) {
 		TestableEffect plugin;
 		plugin.SetFloatParameter( plugin.ParamIndex( "Audio Band" ), (float)band );
@@ -511,10 +512,11 @@ TEST( AudioBandSelectionPicksDifferentPartsOfTheSpectrum )
 		return plugin.AudioLevel();
 	};
 
-	const float bass = levelFor( 1 );
-	const float high = levelFor( 3 );
+	const float bass   = levelFor( 1 );
+	const float volume = levelFor( 0 );
 	CHECK( bass > 0.0f );
-	CHECK( bass > high );
+	CHECK( volume > 0.0f );
+	CHECK( bass > volume );
 }
 
 TEST( StyleAppliesAPresetAndRevertsWhenTouched )

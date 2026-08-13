@@ -410,15 +410,39 @@
 					</tr>
 					<tr>
 						<td>Audio Band</td>
-						<td>Volume / Bass / Mid / High</td>
+						<td>Volume / Bass</td>
 						<td>Bass</td>
 						<td class="desc">
-							Which part of the spectrum drives it. Bass tracks the kick; High
-							catches hats and picks out detail; Volume is the whole mix.
+							Which part of the spectrum drives it. Bass tracks the kick; Volume
+							is the whole buffer, which reads quieter for the same music because
+							it averages over bins that carry no energy.
+							<span class="how">Mid and High existed until 0.1.5 and were removed
+							because they read zero. Resolume packs its spectrum into roughly the
+							bottom eighth of the FFT buffer, and the SDK's analyser splits that
+							buffer into equal thirds &mdash; so both upper selections averaged
+							over silence.</span>
 						</td>
 					</tr>
 				</tbody>
 			</table>
+			</div>
+
+			<div class="note accent">
+				<span class="note-label">Resolume's own audio reactivity is better than this</span>
+				Click the cogwheel beside <em>any</em> parameter and pick an FFT source, and
+				you get a frequency range you drag on a spectrum display rather than two
+				fixed bands, a <strong>Gain</strong> and a <strong>Fall</strong> control, an
+				inverted-response button, and a choice of Clip, Layer, Group, Composition or
+				External audio. It works on every parameter here, not just the mosh gate
+				&mdash; so it is the way to make <strong>Motion Gain</strong>,
+				<strong>Softness</strong> or anything in Damage move with the music.
+				<br><br>
+				<strong>Audio Amount</strong> earns its place doing one thing the host
+				route cannot: it <em>adds</em>. An animated parameter belongs to its
+				animation, so linking Mosh Amount to audio takes the slider away from you.
+				This adds on top of Mosh Amount and sits under <strong>Hold</strong>, so
+				audio can pump underneath while you still play the gate by hand. If you do
+				not need that, use Resolume's.
 			</div>
 
 			<h2 id="output">Output</h2>
