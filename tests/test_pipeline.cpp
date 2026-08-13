@@ -943,4 +943,100 @@ TEST( AdvanceRejectsUnusableInput )
 	pipeline.Release();
 }
 
+// ---------------------------------------------------------------------------
+// Documented interactions
+//
+// These pin behaviours the parameter reference now promises. They are not bugs
+// — each is the correct consequence of how the passes compose — but they are
+// invisible from the parameter names, so a refactor could quietly change them
+// and only the docs would be wrong. A failure here means site/parameters.html
+// needs editing, not necessarily that the code does.
+// ---------------------------------------------------------------------------
+
+TEST( FreezeMakesMotionLagInert )
+{
+	// Motion Lag reaches back through a 16-frame ring of vector fields. Freeze
+	// stops the ring updating, so every slot ends up holding the same vectors
+	// and each lag setting selects an identical field. Documented under "when a
+	// knob does nothing" — Bloom sets Freeze to 1.0, so Lag is dead in Bloom.
+	Rig rig;
+	CHECK( rig.Setup( FRAME_WIDTH, FRAME_HEIGHT ) );
+
+	MoshParams params    = RawEstimatorParams();
+	params.moshAmount    = 1.0f;
+	params.motionThreshold = 0.0f;
+
+	// Real, varied motion first, so the ring genuinely holds different fields.
+	float shift = 0.0f;
+	int   frame = 0;
+	for( ; frame < 12; ++frame )
+	{
+		rig.PushShifted( shift, 0.0f, params, frame );
+		shift += static_cast< float >( frame % 3 ) * 3.0f - 2.0f;
+	}
+
+	const std::vector< float > unfrozen0  = ReadTarget( rig.pipeline.GetDelayedFlowField( 0 ) );
+	const std::vector< float > unfrozen15 = ReadTarget( rig.pipeline.GetDelayedFlowField( 15 ) );
+	// Guard the premise: without freeze the ring must hold genuinely different
+	// fields, or the assertion below would pass for the wrong reason.
+	CHECK( MeanVectorDifference( unfrozen0, unfrozen15 ) > 1e-4f );
+
+	// Now freeze, for longer than the ring is deep, with motion still happening.
+	params.motionFreeze = 1.0f;
+	for( int i = 0; i < 20; ++i, ++frame )
+	{
+		rig.PushShifted( shift, 0.0f, params, frame );
+		shift += static_cast< float >( i % 3 ) * 3.0f - 2.0f;
+	}
+
+	const std::vector< float > frozen0 = ReadTarget( rig.pipeline.GetDelayedFlowField( 0 ) );
+	for( int lag = 1; lag <= 15; ++lag )
+	{
+		const std::vector< float > frozenN = ReadTarget( rig.pipeline.GetDelayedFlowField( lag ) );
+		// Only .xy is held — the residual in .z is recomputed from the current
+		// frame every pass, so comparing whole texels would fail for a reason
+		// that has nothing to do with what this test is about.
+		CHECK_NEAR( MeanVectorDifference( frozen0, frozenN ), 0.0, 1e-6 );
+	}
+
+	rig.Teardown();
+}
+
+TEST( FullMoshAmountMasksTheBurstControls )
+{
+	// The headline interaction, and the one that will waste the most time: the
+	// gate is max( Mosh Amount + audio, held ), so at Mosh Amount 1.0 the burst
+	// machinery cannot raise a level that is already at the ceiling. Trigger,
+	// Hold, Auto Mode, Cut Sensitivity, Burst Length and Beat Divisor all go
+	// inert together — and every Style preset sets Mosh Amount to 1.0.
+	auto levelAfter = []( float moshAmount, bool trigger ) {
+		Rig rig;
+		if( !rig.Setup( 128, 128 ) )
+			return -1.0f;
+
+		MoshParams params  = RawEstimatorParams();
+		params.moshAmount  = moshAmount;
+		params.duration    = 1.0f;
+		params.deltaTime   = 1.0f / 60.0f;
+
+		rig.PushShifted( 0.0f, 0.0f, params, 0 );
+		rig.PushShifted( 2.0f, 0.0f, params, 1 );
+
+		params.trigger = trigger;
+		rig.PushShifted( 4.0f, 0.0f, params, 2 );
+
+		const float level = ReadTarget( rig.pipeline.GetControlState() )[ 0 ];
+		rig.Teardown();
+		return level;
+	};
+
+	// At full Mosh Amount the trigger changes nothing — it is already at 1.
+	CHECK_NEAR( levelAfter( 1.0f, false ), 1.0, 1e-3 );
+	CHECK_NEAR( levelAfter( 1.0f, true ),  1.0, 1e-3 );
+
+	// Below full it very much does, which is what makes the above a masking
+	// result rather than a trigger that never worked.
+	CHECK( levelAfter( 0.0f, true ) - levelAfter( 0.0f, false ) > 0.9f );
+}
+
 }  // namespace datamosh::test
