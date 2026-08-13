@@ -185,8 +185,16 @@ xattr -dr com.apple.quarantine ~/Documents/Resolume\ Arena/Extra\ Effects/Datamo
 			</div>
 
 			<p style="margin-top:18px">
-				On Windows, right-click each DLL &rarr; Properties &rarr; Unblock if the
-				download was flagged. Building from source avoids both, since a locally
+				Windows needs nothing equivalent. You may have seen advice to right-click
+				each DLL and tick <em>Unblock</em> &mdash; that is real for .NET plugins,
+				whose assembly loader checks the mark Windows puts on downloaded files,
+				but <code>LoadLibrary</code> never reads it and Resolume loads these
+				either way. The one thing that does block them is
+				<strong>Smart App Control</strong> on Windows&nbsp;11, which rejects
+				unsigned DLLs silently.
+			</p>
+			<p>
+				Building from source avoids the macOS step entirely, since a locally
 				built plugin is never quarantined.
 			</p>
 

@@ -40,8 +40,10 @@ xattr -dr com.apple.quarantine ~/Documents/Resolume\ Arena/Extra\ Effects/Datamo
 xattr -dr com.apple.quarantine ~/Documents/Resolume\ Arena/Extra\ Effects/DatamoshTransplant.bundle
 ```
 
-**Windows users:** right-click each DLL → Properties → Unblock, if Windows
-flagged the download.
+**Windows users:** nothing to do. Earlier notes told you to right-click each DLL
+and tick *Unblock* — that applies to .NET plugins, not to these; `LoadLibrary`
+never reads the mark. If the plugins do not appear, check whether **Smart App
+Control** is on, which rejects unsigned DLLs silently.
 
 Requires Resolume 7.3+. macOS builds are universal (arm64 + x86_64), so Apple
 Silicon is native.
