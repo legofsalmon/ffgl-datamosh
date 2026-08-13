@@ -250,6 +250,27 @@ Chroma Drift     0.4</code></pre>
 
 			<h2 id="nothing">When nothing is happening</h2>
 
+			<p>
+				In the order worth checking, because each one masks everything below it.
+			</p>
+			<ol class="prose-list">
+				<li><strong>Mosh Amount is 0.</strong> The default, and a deliberate
+					passthrough. Pick a <strong>Style</strong> — every preset sets it to
+					1.0 — or raise it by hand.</li>
+				<li><strong>Motion Threshold is too high for the footage.</strong> It gates
+					per pixel, so anything moving slower than the threshold refreshes
+					normally. Selecting <em>Custom</em> does not reset it, and
+					<strong>Drag leaves it at 0.5</strong> — 4&nbsp;pixels of movement per
+					frame. Set it to 0.</li>
+				<li><strong>Mosh Amount is 1.0 and you are pressing Trigger or Hold.</strong>
+					The gate is already saturated, so they have nothing to add. Bring Mosh
+					Amount down to 0 to play it, or 0.2 as a floor.</li>
+				<li><strong>The footage is not moving.</strong> There is no motion to
+					estimate and nothing to smear. Datamosh needs movement the way a codec
+					does.</li>
+			</ol>
+
+
 			<p>Almost always one of these, roughly in order of likelihood.</p>
 
 			<ul class="prose-list">

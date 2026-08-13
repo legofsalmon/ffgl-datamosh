@@ -38,6 +38,7 @@ struct Testable : PluginType
 	using PluginType::pipeline;
 	using PluginType::ReadParams;
 	using PluginType::UpdateAudioAndTime;
+	using PluginType::ParamValue;
 
 	/// How many parameters the plugin actually holds, as against how many it
 	/// advertises to the host. The two diverging is what makes a plugin
@@ -351,6 +352,55 @@ TEST( ResetEndsAHoldWhoseReleaseNeverArrived )
 	CHECK( !plugin.ReadParams().hold );
 	plugin.SetFloatParameter( holdIndex, 1.0f );
 	CHECK( plugin.ReadParams().hold );
+}
+
+
+TEST( SlidersStillReachThePipelineWhileStyleShowsCustom )
+{
+	// Custom is a label, not a mode. It means "these values match no preset",
+	// and selecting it deliberately changes nothing — so parameters must keep
+	// working exactly as before. Written after a report that the effect could
+	// not be activated on Custom; the cause turned out to be leftover values,
+	// not broken plumbing, and this pins the plumbing so the next such report
+	// can be triaged in one step.
+	TestableEffect plugin;
+	const unsigned int styleIdx = plugin.ParamIndex( "Style" );
+	const unsigned int moshIdx  = plugin.ParamIndex( "Mosh Amount" );
+
+	// From the default Custom, a slider write reaches ReadParams.
+	CHECK_NEAR( plugin.ReadParams().moshAmount, 0.0, 1e-4 );
+	plugin.SetFloatParameter( moshIdx, 1.0f );
+	CHECK_NEAR( plugin.ReadParams().moshAmount, 1.0, 1e-4 );
+
+	// And after a style has been selected and then abandoned.
+	plugin.SetFloatParameter( styleIdx, static_cast< float >( Style::Melt ) );
+	plugin.SetFloatParameter( styleIdx, static_cast< float >( Style::Custom ) );
+	plugin.SetFloatParameter( moshIdx, 0.7f );
+	CHECK_NEAR( plugin.ReadParams().moshAmount, 0.7, 1e-4 );
+}
+
+TEST( AbandoningAStyleKeepsItsValues )
+{
+	// The trap behind that report. Selecting Custom does not restore defaults,
+	// so a style's Motion Threshold survives it — and Drag leaves 0.5, which is
+	// 4px of motion per frame before any pixel may mosh. On ordinary footage
+	// that shuts the gate everywhere and no other slider can do anything, with
+	// nothing on screen to say why.
+	TestableEffect plugin;
+	const unsigned int styleIdx = plugin.ParamIndex( "Style" );
+
+	const float defaultThreshold = plugin.ReadParams().motionThreshold;
+	CHECK_NEAR( defaultThreshold, 0.15, 1e-4 );
+
+	plugin.SetFloatParameter( styleIdx, static_cast< float >( Style::Drag ) );
+	CHECK_NEAR( plugin.ReadParams().motionThreshold, 0.5, 1e-4 );
+
+	plugin.SetFloatParameter( styleIdx, static_cast< float >( Style::Custom ) );
+	// Still 0.5, not back to the 0.15 default — this is the documented
+	// behaviour, and the reason the docs tell you to check it.
+	CHECK_NEAR( plugin.ReadParams().motionThreshold, 0.5, 1e-4 );
+	// And Mosh Amount is left maxed, so raising it cannot help either.
+	CHECK_NEAR( plugin.ReadParams().moshAmount, 1.0, 1e-4 );
 }
 
 TEST( TriggerSurvivesAGatedCall )

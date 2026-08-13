@@ -67,13 +67,29 @@
 			</p>
 
 			<div class="note accent" style="margin-top:24px">
-				<span class="note-label">Read this first</span>
-				Two controls dominate everything else. <strong>Mosh Amount</strong> decides
-				whether pixels may refresh at all &mdash; at zero the plugin is a
-				passthrough no matter what else is set. <strong>Motion Threshold</strong>
-				then decides <em>which</em> pixels: anything moving slower than the
-				threshold refreshes normally, so a high threshold with a still shot also
-				gives you nothing.
+				<span class="note-label">Just dropped it on and nothing is happening?</span>
+				That is correct behaviour, not a fault. <strong>Mosh Amount defaults to
+				0</strong>, which is a pixel-exact passthrough &mdash; an effect that
+				changed your output the instant it landed on a live layer would be a
+				menace mid-set.
+				<br><br>
+				<strong>Pick a Style.</strong> That is the intended way in: every preset
+				sets Mosh Amount to 1.0 along with a coherent set of everything else, so
+				one click takes you from silent to obviously working. Then pull Mosh
+				Amount back down to taste &mdash; and down it must come if you want to
+				<em>play</em> the effect, because at 1.0 the gate is saturated and Trigger,
+				Hold and the audio controls have nothing left to add.
+			</div>
+
+			<div class="note warn" style="margin-top:18px">
+				<span class="note-label">Still nothing, and you have been trying presets?</span>
+				Check <strong>Motion Threshold</strong>. Selecting <em>Custom</em> does not
+				restore defaults &mdash; it only stops the dropdown claiming a preset &mdash;
+				so whatever the last style set stays. <strong>Drag leaves it at 0.5</strong>,
+				which demands 4&nbsp;pixels of movement per frame before any pixel is
+				allowed to mosh. On ordinary footage almost nothing clears that, the gate
+				is shut across the whole frame, and no other slider can do a thing.
+				Set it to 0.
 			</div>
 
 			<h2 id="mosh">Mosh</h2>
