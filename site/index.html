@@ -175,24 +175,34 @@
 				dropdown, not the effects list.
 			</p>
 
-			<div class="note warn">
-				<span class="note-label">macOS</span>
-				The bundles are not signed or notarised, so macOS quarantines them and
-				Resolume will not load them &mdash; with no error anywhere, the plugins
-				simply never appear. Clear it once after installing:
-				<pre style="margin-top:10px"><code>xattr -dr com.apple.quarantine ~/Documents/Resolume\ Arena/Extra\ Effects/Datamosh.bundle
-xattr -dr com.apple.quarantine ~/Documents/Resolume\ Arena/Extra\ Effects/DatamoshTransplant.bundle</code></pre>
+			<div class="note accent">
+				<span class="note-label">macOS &mdash; use the installer</span>
+				Download the <strong>.pkg</strong>, double-click, follow the prompts. It is
+				signed and notarised, so there is no security warning, no Terminal and no
+				password &mdash; it installs into your own Documents folder. Tick Arena,
+				Avenue or both, and quit Resolume first, since it only looks for plugins
+				when it starts.
+				<span class="how">The zip is still there if you would rather copy files by
+				hand, but it needs the quarantine flag cleared afterwards. That step is
+				why the installer exists: macOS quarantines anything extracted from a
+				downloaded archive, and Resolume then refuses to load the plugins with no
+				error at all.</span>
 			</div>
 
 			<p style="margin-top:18px">
-				On Windows, right-click each DLL &rarr; Properties &rarr; Unblock if the
-				download was flagged. Building from source avoids both, since a locally
-				built plugin is never quarantined.
+				<strong>Windows</strong> &mdash; unzip, copy the DLLs into
+				<code>Documents\Resolume Arena\Extra Effects</code>, restart Resolume.
+				You may have seen advice to right-click each DLL and tick
+				<em>Unblock</em>; that is real for .NET plugins, whose assembly loader
+				checks the mark Windows puts on downloaded files, but
+				<code>LoadLibrary</code> never reads it and Resolume loads these either
+				way. The one thing that does block them is <strong>Smart App
+				Control</strong> on Windows&nbsp;11, which rejects unsigned DLLs silently.
 			</p>
 
 			<div class="note accent" style="margin-top:26px">
 				<span class="note-label">Status</span>
-				This is a pre-release. Everything in it is verified by 40 automated tests
+				This is a pre-release. Everything in it is verified by 42 automated tests
 				running a real headless OpenGL&nbsp;4.1 context against synthetic footage
 				with known ground truth, and it now loads and runs in Resolume &mdash; the
 				smoke test passes on a real host. What has not been done is the rest of

@@ -8,6 +8,35 @@ Notable changes to ffgl-datamosh. Format follows
 
 Nothing yet.
 
+## [0.1.5] — 2026-08-13
+
+### Removed
+
+- **`Audio Band` loses Mid and High.** They read zero. `ffglqs::Audio` splits the
+  2048-bin FFT buffer into equal thirds, but Resolume packs its spectrum into
+  roughly the bottom eighth — [resolume/ffgl#25](https://github.com/resolume/ffgl/issues/25),
+  filed by the author of that audio class, measures every bin above ~64 of 512
+  sitting at `0.0f`. Scaled up, all the energy lands inside the bass third, so
+  both upper selections averaged over silence. They were controls that looked
+  like they worked and could not.
+
+  A composition saved against an older build falls back to Volume rather than
+  reading zero forever. If Resolume ever fixes the distribution they are three
+  lines to restore, but not without a test that feeds a realistic spectrum
+  rather than a flat one — the existing tests pass a flat buffer, which is
+  exactly why this was invisible.
+
+### Changed
+
+- The docs now say plainly that **Resolume's own audio reactivity is better than
+  the plugin's** for almost everything. Its parameter FFT gives a draggable
+  frequency range instead of two fixed bands, Gain and Fall controls, an
+  inverted-response option, and a choice of Clip, Layer, Group, Composition or
+  External audio — and it works on every parameter, where the plugin's drives
+  only the mosh gate. `Audio Amount` is worth keeping for one reason: it *adds*
+  to Mosh Amount rather than owning it, so the slider and `Hold` still work
+  while audio pumps underneath. An animated parameter belongs to its animation.
+
 ## [0.1.4] — 2026-08-12
 
 ### Added
@@ -241,7 +270,8 @@ Two defects caught in review before release, both of which fail silently:
   Resolume then silently will not load them; the install notes carry the
   `xattr -dr com.apple.quarantine` fix.
 
-[Unreleased]: https://github.com/legofsalmon/ffgl-datamosh/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/legofsalmon/ffgl-datamosh/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/legofsalmon/ffgl-datamosh/releases/tag/v0.1.5
 [0.1.4]: https://github.com/legofsalmon/ffgl-datamosh/releases/tag/v0.1.4
 [0.1.3]: https://github.com/legofsalmon/ffgl-datamosh/releases/tag/0.1.3
 [0.1.2]: https://github.com/legofsalmon/ffgl-datamosh/releases/tag/v0.1.2

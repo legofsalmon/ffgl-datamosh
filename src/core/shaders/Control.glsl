@@ -126,8 +126,6 @@ void main()
 	//
 	// Hold is a level rather than an edge: it keeps the gate open for exactly as
 	// long as it is true, with no reference to Duration, so it plays like a key.
-	// It deliberately does not touch `burst` — a hold running at the same time
-	// as an auto-fired burst must not cut that burst short when it releases.
 	float held = ( Hold || fire || burst > 0.0 ) ? 1.0 : 0.0;
 
 	burst = max( 0.0, burst - DeltaTime );

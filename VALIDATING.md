@@ -140,10 +140,18 @@ Get-ChildItem $DIR -Recurse | Unblock-File
 Get-Item "$DIR\Datamosh.dll" -Stream * | Select-Object Stream
 ```
 
-**PASS** — only `:$DATA` listed. If `Zone.Identifier` remains, Mark-of-the-Web
-can stop the load with no visible error. Don't use right-click → Properties →
-Unblock: the checkbox only appears when the stream is present, and it does not
-reach files inside folders.
+**PASS** — either result. This check is retained for tidiness, not as a gate:
+`Zone.Identifier` does **not** stop Resolume loading a plugin. The mark is read
+by `ShellExecuteEx`, not by `LoadLibrary`, so a native DLL loads whether or not
+it carries one. The widely-repeated "unblock your plugin" advice comes from .NET
+plugin hosts, whose assembly loader does consult it.
+
+The Windows mechanism that genuinely does block these is **Smart App Control**,
+which evaluates every PE image the loader touches regardless of origin and
+rejects unsigned ones with no error — Resolume runs on and the plugins never
+appear. If S2 fails on Windows 11, check `Windows Security → App & browser
+control → Smart App Control` before anything else. Note it cannot be re-enabled
+once turned off without reinstalling Windows.
 
 ### S2. The effect registered — **GATE A**
 

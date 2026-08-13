@@ -189,10 +189,86 @@ jobs:
             echo "::error::archive contents are nested inside a folder"; exit 1; }
           echo "layout ok"
 
+      # The installer, and the reason it exists: a .zip propagates
+      # com.apple.quarantine to everything it extracts, and Apple's rule is that
+      # a host may load a quarantined plug-in only if it is notarised. Resolume
+      # does not surface the "allow anyway" prompt, so the plugin simply never
+      # appears — which is why the zip has to ship with an xattr command. An
+      # installer payload is laid down by installd, which is not quarantine
+      # aware, so the same binaries delivered this way just work.
+      #
+      # Runs without secrets too. Unsigned, the user clears one Gatekeeper
+      # dialog and the plugins load afterwards; forks and pull requests need
+      # that path to work.
+      - name: Build the installer package
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          # VERSION is resolved in the publish job, which has not run yet, so
+          # this derives its own — only for the package's internal metadata,
+          # which macOS uses to compare installs. The published filename is
+          # applied by publish, exactly as it is for the zips. A branch build
+          # has no version in its ref at all, hence the fallback.
+          version="${{ inputs.version }}"
+          if [ -z "$version" ]; then version="${GITHUB_REF_NAME}"; fi
+          version="${version#v}"
+          case "$version" in
+            [0-9]*) ;;
+            *)      version="0.0.0" ;;
+          esac
+          echo "packaging version ${version}"
+
+          mkdir -p pkg-payload
+          cp -R build/src/plugins/*.bundle pkg-payload/
+          bash packaging/macos/build-pkg.sh pkg-payload "$version" datamosh-macos.pkg
+
+      # Signing is optional; a package that would install the quarantine flag it
+      # exists to avoid is not. Expanding the built package and inspecting the
+      # payload is the only way to see what a user will actually receive.
+      - name: Verify the package payload
+        run: |
+          pkg="datamosh-macos.pkg"
+          test -f "$pkg" || { echo "::error::no package produced"; exit 1; }
+
+          pkgutil --expand "$pkg" expanded
+          found=0
+          for component in expanded/*.pkg; do
+            [ -d "$component" ] || continue
+            found=1
+            ( cd "$component" && tar xzf Payload 2>/dev/null || true )
+            echo "== $component"
+            ls "$component"
+          done
+          [ "$found" = "1" ] || { echo "::error::package contains no components"; exit 1; }
+
+          # Both plugins must be in there, or the installer is an elaborate no-op.
+          for expected in Datamosh.bundle DatamoshTransplant.bundle; do
+            find expanded -name "$expected" -maxdepth 4 | grep -q . || {
+              echo "::error::$expected missing from the package payload"; exit 1; }
+          done
+
+          # The whole point. Anything quarantined in the payload is restored on
+          # install, and the user is back to the terminal command with no clue why.
+          if xattr -lr expanded | grep -q 'com.apple.quarantine'; then
+            echo "::error::package payload carries com.apple.quarantine"
+            exit 1
+          fi
+          echo "payload ok, no quarantine"
+
       - uses: actions/upload-artifact@v4
         with:
           name: datamosh-macos-universal
           path: datamosh-macos-universal.zip
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: datamosh-macos-pkg
+          path: datamosh-macos.pkg
           if-no-files-found: error
 
   publish:
@@ -242,6 +318,7 @@ jobs:
           mkdir -p release
           mv artifacts/datamosh-windows-x64.zip      "release/datamosh-${VERSION}-windows-x64.zip"
           mv artifacts/datamosh-macos-universal.zip  "release/datamosh-${VERSION}-macos-universal.zip"
+          mv artifacts/datamosh-macos.pkg           "release/datamosh-${VERSION}-macos.pkg"
           ls -la release
 
       - name: Publish

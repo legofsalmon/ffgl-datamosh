@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+	Both products are ticked by default rather than detected.
+
+	A JavaScript installation-check could test for /Applications/Resolume Arena.app
+	and preselect accordingly, but a detection that fails — an app installed
+	somewhere unusual, renamed, or on an external volume — leaves every box
+	unticked and the installer appears to do nothing. Installing into a product
+	folder the user does not have costs them one empty directory; a silent
+	no-op costs them the plugin. Untick whichever they do not want.
+-->
+<installer-gui-script minSpecVersion="2">
+	<title>Datamosh for Resolume</title>
+	<organization>ie.letissier</organization>
+	<options customize="always" require-scripts="false" hostArchitectures="arm64,x86_64"/>
+
+	<!-- Everything installs under the user's own Documents folder, so no
+	     administrator password is needed and nothing is written system-wide. -->
+	<domains enable_anywhere="false" enable_currentUserHome="true" enable_localSystem="false"/>
+
+	<welcome file="welcome.html" mime-type="text/html"/>
+	<conclusion file="conclusion.html" mime-type="text/html"/>
+	<license file="LICENSE.txt" mime-type="text/plain"/>
+
+	<choices-outline>
+		<line choice="arena"/>
+		<line choice="avenue"/>
+	</choices-outline>
+
+	<choice id="arena" title="Resolume Arena" visible="true" start_selected="true"
+	        description="Installs into Documents/Resolume Arena/Extra Effects">
+		<pkg-ref id="ie.letissier.datamosh.arena"/>
+	</choice>
+
+	<choice id="avenue" title="Resolume Avenue" visible="true" start_selected="true"
+	        description="Installs into Documents/Resolume Avenue/Extra Effects">
+		<pkg-ref id="ie.letissier.datamosh.avenue"/>
+	</choice>
+
+	<pkg-ref id="ie.letissier.datamosh.arena" version="@VERSION@">datamosh-arena.pkg</pkg-ref>
+	<pkg-ref id="ie.letissier.datamosh.avenue" version="@VERSION@">datamosh-avenue.pkg</pkg-ref>
+</installer-gui-script>

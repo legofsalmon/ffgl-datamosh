@@ -13,13 +13,7 @@ Datamosh for Resolume — Windows
    If the folder does not exist, create it. Resolume also lets you point
    somewhere else in Preferences -> Video.
 
-2. If Windows marked the download as blocked, unblock it.
-
-   Right-click each DLL -> Properties -> tick "Unblock" at the bottom -> OK.
-   Windows adds this to files downloaded from the internet, and it can stop
-   Resolume loading them with no visible error.
-
-3. Restart Resolume.
+2. Restart Resolume.
 
    Datamosh appears in the Effects list. Drop it on a layer, a group, or the
    composition — the composition is where it is at its most useful, with Auto
@@ -27,6 +21,27 @@ Datamosh for Resolume — Windows
 
    Mosh Transplant appears in a layer's blend-mode dropdown, not the
    effects list. It applies that layer's motion to the layers below it.
+
+
+If they do not appear
+---------------------
+
+You do NOT need to "unblock" the DLLs. Earlier versions of these instructions
+said you did. That advice is real for .NET plugins, whose assembly loader does
+check the mark Windows puts on downloaded files, but it does not apply here:
+LoadLibrary, which is what Resolume uses, never reads it.
+
+The one Windows feature that will genuinely stop these loading is Smart App
+Control, on some Windows 11 installs. It checks every DLL the loader touches
+regardless of where it came from, and it rejects unsigned ones silently --
+Resolume keeps running and the plugins simply never appear. Check under
+Windows Security -> App & browser control -> Smart App Control. If it is On,
+these plugins cannot load until it is turned off, and note that turning it off
+is permanent: it cannot be re-enabled without reinstalling Windows.
+
+Otherwise, the usual cause is the folder. Resolume reads the Documents folder
+Windows reports, which OneDrive often redirects -- check whether your Documents
+live under OneDrive and use that copy of the path.
 
 
 Requirements

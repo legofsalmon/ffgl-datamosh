@@ -213,8 +213,17 @@ void DatamoshPlugin< HostBase >::DeclareCommonParams()
 	// argument is decibels — 0 dB is unity, not silence.
 	this->audioParams[ audioParam ].SetGain( 0.0f );
 	AddGrouped( "Sync", ParamRange::Create( "Audio Amount", 0.0f, Range( 0.0f, 1.0f ) ) );
+	// Mid and High used to be here and were removed because they read zero in
+	// practice. ffglqs::Audio splits the 2048-bin buffer into equal thirds, but
+	// Resolume packs the spectrum into roughly the bottom eighth of the buffer
+	// (resolume/ffgl#25, filed by the author of that audio class: with a 512-bin
+	// buffer, every bin above ~64 is 0.0f). Scaled up, all the energy lands
+	// inside the bass third, so the upper two selections were controls that
+	// looked like they did something and could not. If Resolume ever fixes the
+	// distribution, they are three lines to restore — but they must not come
+	// back without a test that feeds a realistic spectrum rather than a flat one.
 	AddGrouped( "Sync", ParamOption::Create( "Audio Band",
-	                                         { { "Volume", 0.0f }, { "Bass", 1.0f }, { "Mid", 2.0f }, { "High", 3.0f } },
+	                                         { { "Volume", 0.0f }, { "Bass", 1.0f } },
 	                                         1 ) );
 
 	// --- output ---
@@ -269,8 +278,9 @@ float DatamoshPlugin< HostBase >::AudioLevel()
 	switch( OptionValue( "Audio Band" ) )
 	{
 	case 1:  return audio.GetBass();
-	case 2:  return audio.GetMed();
-	case 3:  return audio.GetHigh();
+	// Volume, and also the landing place for a composition saved against an
+	// older build that stored Mid or High — falling back to a band that works
+	// beats reading zero forever with nothing to show why.
 	default: return audio.GetVolume();
 	}
 }

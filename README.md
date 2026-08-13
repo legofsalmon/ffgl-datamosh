@@ -38,13 +38,21 @@ codec. [The docs explain the rest.](https://datamosh.letissier.ie)
 
 ## Install
 
-Grab an archive from [Releases](https://github.com/legofsalmon/ffgl-datamosh/releases),
-copy both plugins into `Documents/Resolume Arena/Extra Effects`, restart
-Resolume. Each archive carries an `INSTALL.txt`.
+From [Releases](https://github.com/legofsalmon/ffgl-datamosh/releases):
 
-**macOS**: the bundles are unsigned, so Gatekeeper quarantines them and Resolume
-silently will not load them. Run `xattr -dr com.apple.quarantine` on each bundle
-after copying, or build from source, which avoids it.
+**macOS** — download the `.pkg` and double-click it. Signed and notarised, so no
+security warning, no Terminal and no password; it installs into your Documents
+folder and offers Arena and Avenue as tickboxes.
+
+**Windows** — unzip, copy both DLLs into `Documents\Resolume Arena\Extra
+Effects`, restart Resolume.
+
+The macOS zip is still published for anyone who prefers copying files by hand,
+but it needs `xattr -dr com.apple.quarantine` run on each bundle afterwards.
+That step is exactly what the installer exists to remove: a zip propagates
+quarantine to everything it extracts, and Resolume then refuses to load the
+plugins with no error anywhere. Package payloads are not quarantined, and
+neither is a local build.
 
 ## Build
 
@@ -67,7 +75,7 @@ Install straight into Resolume with
 ## Test
 
 ```sh
-ctest --test-dir build --output-on-failure   # 40 tests
+ctest --test-dir build --output-on-failure   # 42 tests
 ./build/tests/datamosh_tests --profile        # per-pass GPU timing
 ```
 
