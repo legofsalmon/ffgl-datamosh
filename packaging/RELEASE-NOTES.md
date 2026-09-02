@@ -11,7 +11,7 @@ Two FFGL plugins that simulate datamoshing in Resolume, over a shared render cor
 
 ## This is a pre-release — read this first
 
-Everything here is verified by an automated test suite: 42 tests running a real
+Everything here is verified by an automated test suite: 44 tests running a real
 headless OpenGL 4.1 context against synthetic footage with known ground truth,
 green on Linux, Windows and macOS.
 
@@ -25,6 +25,16 @@ What has *not* been done is the rest of the pass — the aesthetic sweeps, a
 The tuning defaults have still never been judged against real footage. Treat
 this as something to try and report back on, not something to put in a show
 without rehearsing first.
+
+## 0.2.0 changes what saved values mean
+
+Several sliders were remapped so their travel does something across its whole
+length — Mosh Amount, Decay, Motion Threshold and Motion Smoothing — and Freeze
+was merged into Motion Smoothing. Endpoints are unchanged; the middle moved. A
+composition saved against 0.1.x will look different at the same slider positions.
+Presets no longer set Mosh Amount, a fresh instance moshes gently rather than
+passing through, and **Default** in the Style list restores the factory panel.
+The full list is in the changelog.
 
 ## Install
 

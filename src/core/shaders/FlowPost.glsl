@@ -1,7 +1,7 @@
 #version 410 core
 
 // Conditions the raw search result into the field the warp actually uses:
-// spatial coherence, temporal inertia, freeze, and hard safety limits.
+// spatial coherence, temporal inertia, and hard safety limits.
 //
 // This pass owns the two controls that decide the character of the effect.
 // Softness blurs the field, taking it from hard macroblocks toward liquid.
@@ -13,8 +13,8 @@ uniform sampler2D PrevFlow;  // last frame's conditioned field
 
 uniform vec2  FlowRes;
 uniform vec2  FrameRes;
-uniform float Smoothing;   // 0..1 temporal blend toward the previous field
-uniform float Freeze;      // 0..1 hold the field instead of re-estimating
+uniform float Smoothing;   // 0..1 temporal inertia, a log-scaled hold time
+uniform float DeltaTime;   // seconds since the last advance
 uniform float Softness;    // 0..1 spatial blur of the field
 uniform float Quantise;    // 0..1 coarseness of the vector grid
 uniform float BlockPixels; // macroblock edge, the coarsest sensible grid step
@@ -58,11 +58,32 @@ void main()
 
 	vec2 previous = HasHistory ? Sanitise( texture( PrevFlow, uv ).xy ) : vec2( 0.0 );
 
-	// Temporal inertia, then freeze. Freeze wins outright at 1: the field stops
+	// Temporal inertia, as a hold time on a log scale rather than a raw
+	// per-frame blend — the same treatment as Mosh Amount, for the same two
+	// reasons: a raw blend crushes its range into the top of the travel, and
+	// it means something different at every frame rate. At 1 the field stops
 	// updating and the warp keeps applying the same vectors every frame, which
 	// is P-frame duplication and produces the bloom.
-	conditioned = mix( conditioned, previous, clamp( Smoothing, 0.0, 1.0 ) );
-	conditioned = mix( conditioned, previous, clamp( Freeze, 0.0, 1.0 ) );
+	//
+	// There used to be a second slider, Freeze, applied right here as another
+	// mix toward the same target. Two successive mixes toward one target
+	// compose to a single mix, 1-(1-S)(1-F), symmetric in the two — measured
+	// identical to every digit — so it was one axis with two names, and it was
+	// folded into this one.
+	const float SMOOTH_MIN_SECONDS = 0.016;
+	const float SMOOTH_MAX_SECONDS = 2.0;
+	float s = clamp( Smoothing, 0.0, 1.0 );
+	float inertia;
+	if( s >= 0.995 )
+	{
+		inertia = 1.0;
+	}
+	else
+	{
+		float hold = SMOOTH_MIN_SECONDS * pow( SMOOTH_MAX_SECONDS / SMOOTH_MIN_SECONDS, s );
+		inertia    = exp2( -DeltaTime / hold ) * clamp( s / 0.05, 0.0, 1.0 );
+	}
+	conditioned = mix( conditioned, previous, inertia );
 
 	// Coarsen the vector grid. A real encoder cannot afford to describe motion
 	// precisely at low bitrates, and the stepped movement that produces is a

@@ -67,29 +67,27 @@
 			</p>
 
 			<div class="note accent" style="margin-top:24px">
-				<span class="note-label">Just dropped it on and nothing is happening?</span>
-				That is correct behaviour, not a fault. <strong>Mosh Amount defaults to
-				0</strong>, which is a pixel-exact passthrough &mdash; an effect that
-				changed your output the instant it landed on a live layer would be a
-				menace mid-set.
+				<span class="note-label">Where to start</span>
+				A fresh instance moshes gently on arrival &mdash; <strong>Mosh Amount
+				defaults to 0.3</strong>, a hold of about a fifth of a second &mdash; so you
+				can see it is alive before you touch anything. Drag it to 0 for an exact
+				passthrough.
 				<br><br>
-				<strong>Pick a Style.</strong> That is the intended way in: every preset
-				sets Mosh Amount to 1.0 along with a coherent set of everything else, so
-				one click takes you from silent to obviously working. Then pull Mosh
-				Amount back down to taste &mdash; and down it must come if you want to
-				<em>play</em> the effect, because at 1.0 the gate is saturated and Trigger,
-				Hold and the audio controls have nothing left to add.
+				<strong>Then pick a Style.</strong> Each one writes a coherent set of motion
+				and damage settings and leaves Mosh Amount alone, so Trigger, Hold and the
+				audio controls keep working on top of it. Push Mosh Amount up for more,
+				down to make room to play &mdash; at 1.0 the gate is saturated and there is
+				nothing left for a key or a kick to add.
 			</div>
 
 			<div class="note warn" style="margin-top:18px">
-				<span class="note-label">Still nothing, and you have been trying presets?</span>
+				<span class="note-label">Nothing happening after a preset?</span>
 				Check <strong>Motion Threshold</strong>. Selecting <em>Custom</em> does not
 				restore defaults &mdash; it only stops the dropdown claiming a preset &mdash;
-				so whatever the last style set stays. <strong>Drag leaves it at 0.5</strong>,
-				which demands 4&nbsp;pixels of movement per frame before any pixel is
-				allowed to mosh. On ordinary footage almost nothing clears that, the gate
-				is shut across the whole frame, and no other slider can do a thing.
-				Set it to 0.
+				so whatever the last style set stays. Drag leaves it at 0.5, which is
+				2&nbsp;pixels of movement per frame on slow footage. Set it to 0, or
+				choose <strong>Default</strong> from the Style list to get the factory
+				panel back.
 			</div>
 
 			<h2 id="mosh">Mosh</h2>
@@ -104,26 +102,37 @@
 				<tbody>
 					<tr>
 						<td>Style</td>
-						<td>6 presets</td>
+						<td>5 looks + Default</td>
 						<td>Custom</td>
 						<td class="desc">
 							Writes a coherent group of parameters in one move: Melt, Bloom,
-							Drag, Liquid or Corrupt. Touching any parameter a style owns flips
-							this back to Custom, so the dropdown never claims something the
-							settings do not say. Selecting a style clears whatever the previous
-							one set rather than layering on top.
+							Drag, Liquid or Corrupt. <strong>A style never touches Mosh
+							Amount</strong> &mdash; it describes the character of the motion and
+							the damage, and the gate stays yours, so Trigger, Hold and audio all
+							keep working on top of a preset. Touching any parameter a style owns
+							flips this back to Custom, so the dropdown never claims something the
+							settings do not say. <strong>Default</strong> restores the factory
+							panel; selecting Custom restores nothing, because Custom is a status
+							rather than a destination.
 						</td>
 					</tr>
 					<tr>
 						<td>Mosh Amount</td>
 						<td>0 &ndash; 1</td>
-						<td>0</td>
+						<td>0.3</td>
 						<td class="desc">
-							The master gate. At 0 every pixel refreshes from the input and the
-							plugin is a passthrough. At 1 nothing refreshes and the image is
-							carried entirely by motion compensation. Anything in between is a
-							per-frame blend, so mid values decay toward the live image rather
-							than holding half of it.
+							The master gate, as a <strong>hold time on a log scale</strong>. At 0
+							every pixel refreshes from the input and the plugin is an exact
+							passthrough. At 1 nothing refreshes and the image is carried entirely
+							by motion compensation. In between, the slider sets how long old
+							pixels survive: 0.25 is about a tenth of a second, 0.5 about half a
+							second, 0.75 a couple of seconds &mdash; and the same at any frame
+							rate.
+							<span class="how">Until 0.2.0 this was a raw per-frame blend, which
+							meant half the slider bought a third of one percent of the effect and
+							the whole usable range sat above 0.9. It was also frame-rate
+							dependent. The endpoints are unchanged; the middle is where it
+							moved.</span>
 						</td>
 					</tr>
 					<tr>
@@ -162,7 +171,7 @@
 					</tr>
 					<tr>
 						<td>Auto Mode</td>
-						<td>Manual / On Cut / On Beat</td>
+						<td>Manual / On Cut (Comp) / On Beat</td>
 						<td>Manual</td>
 						<td class="desc">
 							<strong>On Cut</strong> watches the incoming video and fires a burst
@@ -195,11 +204,13 @@
 					</tr>
 					<tr>
 						<td>Beat Divisor</td>
-						<td>1 / 2 / 4 / 8 / 16</td>
-						<td>4</td>
+						<td>1 Beat / 2 Beats / 1 Bar / 2 Bars / 4 Bars</td>
+						<td>1 Bar</td>
 						<td class="desc">
-							Beats between firings in On Beat mode. 4 is once a bar, 16 once every
-							four bars. Needs Resolume's tempo to be running for anything to
+							How often On Beat fires. Labelled in beats and bars rather than as a
+							bare column of numbers, because next to &ldquo;On Beat&rdquo; a
+							musician reads 1/2/4/8/16 as note values &mdash; where 2 means
+							<em>longer</em>. Needs Resolume's tempo to be running for anything to
 							happen.
 						</td>
 					</tr>
@@ -229,30 +240,28 @@
 						</td>
 					</tr>
 					<tr>
-						<td>Freeze</td>
-						<td>0 &ndash; 1</td>
-						<td>0</td>
-						<td class="desc">
-							Holds the vector field instead of re-estimating it. At 1 the same
-							vectors keep applying every frame regardless of what the footage does
-							&mdash; this is P-frame duplication, and it is what produces the
-							bloom. Note the field has to exist first: turning Freeze on over a
-							still shot holds a field of zeroes and nothing happens.
-						</td>
-					</tr>
-					<tr>
 						<td>Motion Smoothing</td>
 						<td>0 &ndash; 1</td>
 						<td>0.3</td>
 						<td class="desc">
-							Temporal inertia on the field. Higher values make motion take longer
-							to change direction, which lengthens trails and stops the smear
-							flickering when the estimate is uncertain.
+							Temporal inertia on the field, as a hold time on a log scale: equal
+							travel is an equal ratio, and the same setting behaves the same at
+							30 and 60&nbsp;fps. Higher values make motion take longer to change
+							direction, which lengthens trails and stops the smear flickering
+							when the estimate is uncertain. <strong>At 1 the field never
+							updates</strong> &mdash; the same vectors keep applying every frame
+							regardless of what the footage does. That is P-frame duplication,
+							and it is what produces the bloom.
+							<span class="how">The field has to exist first: pushing this to 1
+							over a still shot holds a field of zeroes and nothing happens. Let
+							movement play, then hold it. Until 0.2.0 this top end was a separate
+							slider called Freeze; the two were provably one operation and were
+							merged.</span>
 						</td>
 					</tr>
 					<tr>
 						<td>Motion Threshold</td>
-						<td>0 &ndash; 1 (0&ndash;8 px)</td>
+						<td>0 &ndash; 1, squared (0&ndash;8 px)</td>
 						<td>0.15</td>
 						<td class="desc">
 							How much a region must be moving before it is allowed to mosh.
@@ -260,6 +269,12 @@
 							fast-moving blocks smear and still areas stay sharp &mdash; that is
 							the pixel-drag look. Measured on the estimate before Motion Gain, so
 							turning gain up smears harder without changing what counts as moving.
+							<span class="how">The travel is squared: 0.5 is 2&nbsp;px of movement
+							per frame, not 4, because ordinary footage mostly moves under 3&nbsp;px
+							and a linear slider kept the whole decision in its bottom quarter.
+							It is also clamped below how far the estimator can look at the
+							current Quality, so no setting can shut the gate for every
+							pixel.</span>
 						</td>
 					</tr>
 					<tr>
@@ -285,14 +300,14 @@
 						</td>
 					</tr>
 					<tr>
-						<td>Pel Snap</td>
+						<td>Pixel Snap</td>
 						<td>0 &ndash; 1</td>
 						<td>1</td>
 						<td class="desc">
 							Snaps the displacement to whole pixels. Leave it on unless you want
 							softness: the accumulated image is resampled into itself every
 							frame, and without snapping the interpolation compounds and blurs it
-							to mush within a couple of seconds. Real codecs work in fixed pel
+							to mush within a couple of seconds. Real codecs work in fixed pixel
 							units for the same reason.
 						</td>
 					</tr>
@@ -330,7 +345,7 @@
 					<tr>
 						<td>Motion Lag</td>
 						<td>0 &ndash; 15 frames</td>
-						<td>0</td>
+						<td>2</td>
 						<td class="desc">
 							Applies a vector field from this many frames ago instead of the
 							current one, so motion lands on content it does not belong to. The
@@ -388,9 +403,12 @@
 						<td>0</td>
 						<td class="desc">
 							Bleeds the live image back in even at full mosh, as a half-life:
-							0 holds forever, 1 recovers in a fraction of a second. Being a
-							half-life rather than a per-frame fraction, the same setting behaves
-							identically at 30 and 60&nbsp;fps and through frame-rate dips.
+							0 holds forever, 0.5 recovers in about two thirds of a second, 1 in
+							a twentieth. The scale is geometric, so each quarter turn is roughly
+							a threefold change &mdash; until 0.2.0 it was linear, which put 0.5
+							at a four-second half-life and nothing visible happened until the
+							last fifth of the travel. Being a half-life rather than a per-frame
+							fraction, the same setting behaves identically at 30 and 60&nbsp;fps.
 							Useful as a safety net so a held mosh cannot stay collapsed forever.
 						</td>
 					</tr>
@@ -427,12 +445,12 @@
 					</tr>
 					<tr>
 						<td>Audio Band</td>
-						<td>Volume / Bass</td>
+						<td>Full Range / Bass</td>
 						<td>Bass</td>
 						<td class="desc">
-							Which part of the spectrum drives it. Bass tracks the kick; Volume
-							is the whole buffer, which reads quieter for the same music because
-							it averages over bins that carry no energy.
+							Which part of the spectrum drives it. Bass tracks the kick; Full
+							Range is the whole buffer, which reads quieter for the same music
+							because it averages over bins that carry no energy.
 							<span class="how">Mid and High existed until 0.1.5 and were removed
 							because they read zero. Resolume packs its spectrum into roughly the
 							bottom eighth of the FFT buffer, and the SDK's analyser splits that
@@ -549,8 +567,7 @@
 
 			<div class="note warn">
 				<span class="note-label">Read this one first</span>
-				<strong>Every Style preset sets Mosh Amount to 1.0</strong>, and at full
-				Mosh Amount <em>seven</em> other controls stop doing anything:
+				<strong>At Mosh Amount 1.0, seven other controls stop doing anything:</strong>
 				<strong>Trigger</strong>, <strong>Hold</strong>, <strong>Auto Mode</strong>,
 				<strong>Cut Sensitivity</strong>, <strong>Burst Length</strong>,
 				<strong>Beat Divisor</strong> and <strong>Audio Amount</strong>.
@@ -558,12 +575,12 @@
 				The gate is <code>max( Mosh Amount + audio, held )</code>. Once Mosh Amount
 				is 1 the result is 1 whatever the burst machinery does, and the audio
 				headroom &mdash; exactly <code>1 &minus; Mosh&nbsp;Amount</code> &mdash; is
-				zero. So the moment you pick a preset, every control you would
-				<em>play</em> goes dead.
+				zero. Full is a look, not a floor: leave headroom above it if you intend
+				to play anything.
 				<br><br>
-				<strong>Fix:</strong> after selecting a style, pull Mosh Amount back down.
-				0 to play it entirely by hand, or 0.2&ndash;0.3 as a floor for audio and
-				triggers to push up from.
+				Until 0.2.0 every Style preset pushed Mosh Amount to 1.0, so picking a
+				look was the gesture that disarmed everything you would play. Presets no
+				longer touch it.
 			</div>
 
 			<h3>When a knob does nothing</h3>
@@ -576,7 +593,7 @@
 				<tbody>
 					<tr>
 						<td>Trigger, Hold, Auto Mode, Cut&nbsp;Sensitivity, Burst&nbsp;Length, Beat&nbsp;Divisor</td>
-						<td><strong>Mosh Amount</strong> is 1.0<br><span class="how">— which every Style sets</span></td>
+						<td><strong>Mosh Amount</strong> is 1.0</td>
 						<td class="desc">
 							The gate takes whichever is larger, and Mosh Amount already won.
 						</td>
@@ -592,13 +609,13 @@
 					</tr>
 					<tr>
 						<td>Motion Lag</td>
-						<td><strong>Freeze</strong> is 1.0<br><span class="how">— which the Bloom preset sets</span></td>
+						<td><strong>Motion Smoothing</strong> is 1.0<br><span class="how">— which the Bloom preset sets</span></td>
 						<td class="desc">
-							Lag reaches back through a 16-frame ring of vector fields. Freeze
-							stops the ring updating, so all sixteen slots hold the same
+							Lag reaches back through a 16-frame ring of vector fields. A full
+							hold stops the ring updating, so all sixteen slots hold the same
 							vectors and every lag setting selects an identical field.
-							Measured difference between lag&nbsp;0 and lag&nbsp;15 at
-							Freeze&nbsp;1.0: <code>0.00000000</code>.
+							Measured difference between lag&nbsp;0 and lag&nbsp;15 at a full
+							hold: <code>0.00000000</code>.
 						</td>
 					</tr>
 					<tr>
@@ -611,18 +628,6 @@
 							<code>0.078</code> at 0.9, <code>0.053</code> at 0.99 and exactly
 							<code>0</code> at 1.0 &mdash; you lose a third of Lag's effect by
 							0.9 without anything looking wrong.
-						</td>
-					</tr>
-					<tr>
-						<td>Everything</td>
-						<td><strong>Quality</strong> is Low and <strong>Motion Threshold</strong> is 1.0</td>
-						<td class="desc">
-							Quality caps how far the estimator can look: Low&nbsp;8&nbsp;px,
-							Medium&nbsp;16, High&nbsp;32, Ultra&nbsp;64. Motion Threshold tops
-							out at 8&nbsp;px. At Quality Low those numbers meet, so no pixel
-							can ever exceed the threshold, the gate shuts everywhere and the
-							plugin emits its input untouched &mdash; which looks exactly like a
-							correctly-bypassing effect.
 						</td>
 					</tr>
 					<tr>
@@ -641,17 +646,7 @@
 
 			<h3>Things that compound</h3>
 
-			<div class="note accent">
-				<span class="note-label">Freeze and Motion Smoothing are the same knob twice</span>
-				Both blend the vector field toward the previous frame's, one after the
-				other, so the effective hold is
-				<code>1 &minus; (1&minus;Smoothing)(1&minus;Freeze)</code> &mdash; and it is
-				symmetric, so it genuinely does not matter which one you reach for. At the
-				default Smoothing of 0.3, a Freeze of 0.5 actually gives you 0.65. If
-				Freeze feels stronger than the number suggests, this is why.
-			</div>
-
-			<div class="note accent">
+<div class="note accent">
 				<span class="note-label">Decay quietly caps Mosh Amount</span>
 				Persistence is a product:
 				<code>mosh level &times; gate &times; retention</code>. Any Decay above 0
@@ -662,14 +657,14 @@
 			</div>
 
 			<div class="note accent">
-				<span class="note-label">Style only owns fourteen parameters</span>
-				Selecting a preset writes Mosh Amount, Motion Gain, Freeze, Motion
-				Smoothing, Motion Threshold, Softness, Pel Snap, Block Size, Motion Lag,
-				Block Repeat, Quantise, Corruption, Chroma Drift and Decay &mdash; and
-				editing any of those flips the dropdown back to Custom. Everything else
-				&mdash; Trigger, Hold, Reset, Auto Mode, Cut Sensitivity, Burst Length,
-				Beat Divisor, Invert Motion, Audio, Mix, Quality &mdash; is neither written
-				nor watched. Change those and the dropdown keeps naming a preset, which is
+				<span class="note-label">Style only owns twelve parameters</span>
+				Selecting a preset writes Motion Gain, Motion Smoothing, Motion
+				Threshold, Softness, Pixel Snap, Block Size, Motion Lag, Block Repeat,
+				Quantise, Corruption, Chroma Drift and Decay &mdash; and editing any of
+				those flips the dropdown back to Custom. Everything else &mdash;
+				<strong>Mosh Amount</strong>, Trigger, Hold, Reset, Auto Mode, Cut
+				Sensitivity, Burst Length, Beat Divisor, Invert Motion, Audio, Mix,
+				Quality &mdash; is neither written nor watched. Change those and the dropdown keeps naming a preset, which is
 				intended: they are how you play a look, not part of what the look is.
 			</div>
 

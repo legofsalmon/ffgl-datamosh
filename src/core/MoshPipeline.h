@@ -144,6 +144,13 @@ private:
 	/// False before the first frame and after every reallocation, when there is
 	/// no previous frame to displace.
 	bool hasHistory = false;
+
+	/// How far the pyramid can legitimately reach this frame, in pixels. Set
+	/// by PassFlowPost, read by PassMosh to cap the motion gate — at Quality
+	/// Low the reach is 8px and so is the top of Motion Threshold, and a gate
+	/// that no pixel can ever clear is a bypass indistinguishable from a dead
+	/// plugin.
+	float maxPixels = 8.0f;
 };
 
 }  // namespace datamosh

@@ -70,8 +70,7 @@
 				the outgoing shot is dragged along by movement that now belongs to the
 				incoming one.
 			</p>
-			<pre><code>Mosh Amount      1.0
-Motion Threshold 0.0     &larr; everything moshes, not just fast areas
+			<pre><code>Motion Threshold 0.0     &larr; everything moshes, not just fast areas
 Motion Gain      1.2
 Motion Smoothing 0.4
 Softness         0.3
@@ -83,20 +82,19 @@ Motion Lag       2       &larr; enough mismatch to stop it looking like a morph<
 
 			<h3>Bloom &mdash; motion piling up on itself</h3>
 			<p>
-				Freeze the field and the same vectors keep applying every frame. The image
-				stops being a picture and becomes flow.
+				Hold the field &mdash; Motion Smoothing all the way up &mdash; and the same
+				vectors keep applying every frame. The image stops being a picture and
+				becomes flow.
 			</p>
-			<pre><code>Mosh Amount      1.0
-Freeze           1.0     &larr; the whole trick
+			<pre><code>Motion Smoothing 1.0     &larr; the whole trick: a full hold
 Motion Gain      1.5
-Motion Smoothing 0.6
 Motion Threshold 0.0
 Decay            0.1     &larr; so it recovers instead of collapsing forever</code></pre>
 			<div class="note">
 				<span class="note-label">Order matters</span>
-				Freeze holds whatever field exists <em>at the moment you enable it</em>. Turn
-				it on during a still shot and you have frozen a field of zeroes, and nothing
-				will happen. Let some movement play first, then freeze.
+				A full hold keeps whatever field exists <em>at the moment you set it</em>.
+				Push Smoothing to 1 during a still shot and you have frozen a field of
+				zeroes, and nothing will happen. Let some movement play first, then hold.
 			</div>
 
 			<h3>Pixel drag &mdash; trails without collapse</h3>
@@ -104,8 +102,7 @@ Decay            0.1     &larr; so it recovers instead of collapsing forever</co
 				Only what is moving fast smears. Still areas stay sharp, so the shot remains
 				readable and the effect reads as motion trails rather than as breakage.
 			</p>
-			<pre><code>Mosh Amount      1.0
-Motion Threshold 0.5     &larr; the control that defines this look
+			<pre><code>Motion Threshold 0.5     &larr; the control that defines this look
 Motion Gain      2.0
 Motion Smoothing 0.2
 Block Size       32      &larr; chunky, and cheap</code></pre>
@@ -116,9 +113,8 @@ Block Size       32      &larr; chunky, and cheap</code></pre>
 				optical-flow morph than to a codec, which is sometimes exactly what a track
 				wants.
 			</p>
-			<pre><code>Mosh Amount      1.0
-Softness         1.0     &larr; interpolate between block vectors
-Pel Snap         0.0     &larr; sub-pixel, so it stays soft
+			<pre><code>Softness         1.0     &larr; interpolate between block vectors
+Pixel Snap       0.0     &larr; sub-pixel, so it stays soft
 Motion Smoothing 0.5
 Block Size       8</code></pre>
 
@@ -127,8 +123,7 @@ Block Size       8</code></pre>
 				Every damage control engaged. The furthest from clean motion compensation,
 				and the closest to a genuinely broken file.
 			</p>
-			<pre><code>Mosh Amount      1.0
-Motion Threshold 0.1
+			<pre><code>Motion Threshold 0.1
 Motion Lag       4
 Corruption       0.4
 Block Repeat     0.3
@@ -165,9 +160,9 @@ Chroma Drift     0.4</code></pre>
 			<div class="note warn">
 				<span class="note-label">If pressing it does nothing</span>
 				Check <strong>Mosh Amount</strong> is not already at 1. Hold and Amount feed
-				the same gate, so at full Amount there is nothing left to add &mdash; and
-				every <strong>Style</strong> preset sets Amount to 1 when you pick it. Drop
-				it back to 0 after selecting a style if you intend to play the mosh by hand.
+				the same gate, so at full Amount there is nothing left to add. Presets never
+				touch it, so if it is at 1 you put it there &mdash; bring it down to make
+				room for the key.
 			</div>
 			<p>
 				<strong>Reset</strong> ends a hold even while the control still reads on, so
@@ -254,17 +249,16 @@ Chroma Drift     0.4</code></pre>
 				In the order worth checking, because each one masks everything below it.
 			</p>
 			<ol class="prose-list">
-				<li><strong>Mosh Amount is 0.</strong> The default, and a deliberate
-					passthrough. Pick a <strong>Style</strong> — every preset sets it to
-					1.0 — or raise it by hand.</li>
+				<li><strong>Mosh Amount is 0.</strong> An exact passthrough by design. It
+					defaults to 0.3, so if it reads 0 someone put it there. Raise it.</li>
 				<li><strong>Motion Threshold is too high for the footage.</strong> It gates
 					per pixel, so anything moving slower than the threshold refreshes
-					normally. Selecting <em>Custom</em> does not reset it, and
-					<strong>Drag leaves it at 0.5</strong> — 4&nbsp;pixels of movement per
-					frame. Set it to 0.</li>
+					normally. Selecting <em>Custom</em> does not reset it, and Drag leaves
+					it at 0.5 — 2&nbsp;pixels of movement per frame. Set it to 0, or pick
+					<strong>Default</strong> from the Style list.</li>
 				<li><strong>Mosh Amount is 1.0 and you are pressing Trigger or Hold.</strong>
 					The gate is already saturated, so they have nothing to add. Bring Mosh
-					Amount down to 0 to play it, or 0.2 as a floor.</li>
+					Amount down to make room — 0 to play it entirely by hand.</li>
 				<li><strong>The footage is not moving.</strong> There is no motion to
 					estimate and nothing to smear. Datamosh needs movement the way a codec
 					does.</li>
@@ -287,8 +281,9 @@ Chroma Drift     0.4</code></pre>
 					estimated motion; a locked-off static frame has none to work with.
 				</li>
 				<li>
-					<strong>Freeze was enabled before there was a field.</strong> It is
-					holding zeroes. Set Freeze to 0, let movement play, then re-enable.
+					<strong>The field was held before there was a field.</strong> Motion
+					Smoothing at 1 is holding zeroes. Bring it down, let movement play, then
+					hold again.
 				</li>
 				<li>
 					<strong>Mix is down.</strong> It crossfades the whole result back to the

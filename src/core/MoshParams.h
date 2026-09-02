@@ -55,9 +55,11 @@ struct MoshParams
 	/// Multiplier on the estimated vectors. >1 exaggerates the smear.
 	float motionGain      = 1.0f;
 	/// 0..1 blend toward holding the vector field instead of re-estimating it.
-	/// At 1 this is P-frame duplication: motion keeps applying and blooms.
-	float motionFreeze    = 0.0f;
-	/// 0..1 temporal blend of the vector field. Longer trails, more inertia.
+	/// 0..1 temporal inertia of the vector field, as a hold time on a log
+	/// scale rather than a raw per-frame blend. At 1 the field never updates:
+	/// P-frame duplication, the bloom. This absorbed the old `motionFreeze`,
+	/// which was the same operation applied a second time — two successive
+	/// mixes toward the same target compose to one, 1-(1-S)(1-F), symmetric.
 	float motionSmoothing = 0.3f;
 	/// Minimum motion, in pixels, before a region is treated as moving.
 	float motionThreshold = 0.15f;
@@ -114,8 +116,13 @@ struct MoshParams
 	/// Seconds since the last state advance. The pipeline uses this rather than
 	/// a frame count so behaviour is identical at any host frame rate.
 	float deltaTime = 1.0f / 60.0f;
-	/// Monotonic frame counter, used only to decorrelate the corruption noise.
+	/// Monotonic frame counter.
 	int   frame     = 0;
+	/// Seed for the corruption and block-repeat hashes. Advances on eighth
+	/// notes when the host runs a clock, every few frames otherwise — so a
+	/// broken block stays broken for a musical duration instead of re-rolling
+	/// every frame into 60Hz shimmer. Real damage persists; that is the point.
+	int   corruptEpoch = 0;
 };
 
 /// Pyramid depth for a quality setting.

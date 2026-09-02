@@ -36,10 +36,21 @@ public:
 		// on the layers below) and input 1 is the source (this layer's clip).
 		// Taking motion from this layer and pixels from below is the useful
 		// default — it makes the clip you drop the mixer onto the "motion clip".
-		AddParam( ParamOption::Create( "Motion Source",
-		                               { { "This Layer", 0.0f }, { "Layer Below", 1.0f } },
-		                               0 ) );
+		// Grouped, or it floats above every collapsible section as an orphan.
+		this->AddGrouped( "Mosh", ParamOption::Create( "Motion Source",
+		                                               { { "This Layer", 0.0f }, { "Layer Below", 1.0f } },
+		                                               0 ) );
 		DeclareCommonParams();
+
+		// mixVal (index 0) cannot be renamed or removed — see above — but it can
+		// be grouped. SetParamGroup mutates the record in place; it is the same
+		// call AddGrouped makes for every other parameter, so it cannot
+		// reproduce the phantom-parameter bug that SetParamInfo's push_back
+		// does. Hiding it is one more in-place call, but it waits on a check in
+		// Resolume: whether the host special-cases index 0 of a mixer as the
+		// blend amount. Given what happened last time anyone touched this
+		// parameter, that check comes first.
+		this->SetParamGroup( 0, "Mosh" );
 	}
 
 protected:

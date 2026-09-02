@@ -75,7 +75,7 @@ Install straight into Resolume with
 ## Test
 
 ```sh
-ctest --test-dir build --output-on-failure   # 42 tests
+ctest --test-dir build --output-on-failure   # 44 tests
 ./build/tests/datamosh_tests --profile        # per-pass GPU timing
 ```
 
