@@ -69,7 +69,7 @@
 
 	/* Per-block motion, in whole pixels. Snapped, because resampling an
 	 * accumulation buffer with interpolation every frame turns it to mush —
-	 * the same reason Pel Snap defaults to on in the plugin. */
+	 * the same reason Pixel Snap defaults to on in the plugin. */
 	function vectorFor(col, row, t) {
 		var wave = Math.sin(row * 0.55 + t * 0.7) * 0.5 + Math.cos(col * 0.3 - t * 0.5) * 0.5;
 		return {

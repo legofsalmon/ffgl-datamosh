@@ -367,8 +367,9 @@ TEST( SlidersStillReachThePipelineWhileStyleShowsCustom )
 	const unsigned int styleIdx = plugin.ParamIndex( "Style" );
 	const unsigned int moshIdx  = plugin.ParamIndex( "Mosh Amount" );
 
-	// From the default Custom, a slider write reaches ReadParams.
-	CHECK_NEAR( plugin.ReadParams().moshAmount, 0.0, 1e-4 );
+	// From the default Custom, a slider write reaches ReadParams. The default
+	// is 0.3 now — a fresh instance visibly moshes rather than passing through.
+	CHECK_NEAR( plugin.ReadParams().moshAmount, 0.3, 1e-4 );
 	plugin.SetFloatParameter( moshIdx, 1.0f );
 	CHECK_NEAR( plugin.ReadParams().moshAmount, 1.0, 1e-4 );
 
@@ -382,10 +383,11 @@ TEST( SlidersStillReachThePipelineWhileStyleShowsCustom )
 TEST( AbandoningAStyleKeepsItsValues )
 {
 	// The trap behind that report. Selecting Custom does not restore defaults,
-	// so a style's Motion Threshold survives it — and Drag leaves 0.5, which is
-	// 4px of motion per frame before any pixel may mosh. On ordinary footage
-	// that shuts the gate everywhere and no other slider can do anything, with
-	// nothing on screen to say why.
+	// so a style's Motion Threshold survives it — and Drag leaves 0.5. Under the
+	// squared law that is 2px of motion per frame rather than the 4px that shut
+	// the gate frame-wide on ordinary footage, and the Default entry in the
+	// Style list is the way back. The persistence itself is by design: Custom
+	// means "edited", and restoring on it would wipe the operator's own edits.
 	TestableEffect plugin;
 	const unsigned int styleIdx = plugin.ParamIndex( "Style" );
 
@@ -399,8 +401,11 @@ TEST( AbandoningAStyleKeepsItsValues )
 	// Still 0.5, not back to the 0.15 default — this is the documented
 	// behaviour, and the reason the docs tell you to check it.
 	CHECK_NEAR( plugin.ReadParams().motionThreshold, 0.5, 1e-4 );
-	// And Mosh Amount is left maxed, so raising it cannot help either.
-	CHECK_NEAR( plugin.ReadParams().moshAmount, 1.0, 1e-4 );
+	// Mosh Amount is untouched by every preset — it is the performance
+	// control, and a preset never writes the performance control — so it
+	// still reads the factory default. That used to be the other half of this
+	// trap: presets left it at 1.0, where raising it could not help either.
+	CHECK_NEAR( plugin.ReadParams().moshAmount, 0.3, 1e-4 );
 }
 
 TEST( TriggerSurvivesAGatedCall )
@@ -451,10 +456,9 @@ TEST( ParametersMapToTheRightFields )
 
 	set( "Mosh Amount", 0.75f );
 	set( "Motion Gain", 2.5f );
-	set( "Freeze", 0.4f );
 	set( "Motion Threshold", 0.6f );
 	set( "Softness", 0.2f );
-	set( "Pel Snap", 0.1f );
+	set( "Pixel Snap", 0.1f );
 	set( "Decay", 0.3f );
 	set( "Corruption", 0.45f );
 	set( "Chroma Drift", 0.55f );
@@ -473,7 +477,6 @@ TEST( ParametersMapToTheRightFields )
 
 	CHECK_NEAR( params.moshAmount, 0.75, 1e-5 );
 	CHECK_NEAR( params.motionGain, 2.5, 1e-5 );
-	CHECK_NEAR( params.motionFreeze, 0.4, 1e-5 );
 	CHECK_NEAR( params.motionThreshold, 0.6, 1e-5 );
 	CHECK_NEAR( params.softness, 0.2, 1e-5 );
 	CHECK_NEAR( params.pelSnap, 0.1, 1e-5 );
@@ -675,12 +678,12 @@ TEST( StyleSurvivesUnrelatedParameterWrites )
 	CHECK_NEAR( plugin.GetFloatParameter( styleIndex ), static_cast< float >( Style::Bloom ), 1e-5 );
 
 	// A host echoing back exactly what the style set is not a change either.
-	const unsigned int freezeIndex = plugin.ParamIndex( "Freeze" );
-	plugin.SetFloatParameter( freezeIndex, plugin.GetFloatParameter( freezeIndex ) );
+	const unsigned int smoothingIndex = plugin.ParamIndex( "Motion Smoothing" );
+	plugin.SetFloatParameter( smoothingIndex, plugin.GetFloatParameter( smoothingIndex ) );
 	CHECK_NEAR( plugin.GetFloatParameter( styleIndex ), static_cast< float >( Style::Bloom ), 1e-5 );
 
 	// Actually moving one of the style's own parameters does depart from it.
-	plugin.SetFloatParameter( freezeIndex, 0.25f );
+	plugin.SetFloatParameter( smoothingIndex, 0.25f );
 	CHECK_NEAR( plugin.GetFloatParameter( styleIndex ), static_cast< float >( Style::Custom ), 1e-5 );
 }
 

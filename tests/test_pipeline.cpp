@@ -67,7 +67,6 @@ MoshParams RawEstimatorParams()
 	MoshParams params;
 	params.motionSmoothing = 0.0f;
 	params.softness        = 0.0f;
-	params.motionFreeze    = 0.0f;
 	params.blockSize       = 16;
 	params.quality         = Quality::High;
 	params.deltaTime       = 1.0f / 60.0f;
@@ -298,7 +297,7 @@ TEST( MotionEstimationTracksKnownVelocity )
 	}
 }
 
-TEST( FreezeHoldsTheVectorField )
+TEST( FullSmoothingHoldsTheVectorField )
 {
 	Rig rig;
 	CHECK( rig.Setup( FRAME_WIDTH, FRAME_HEIGHT ) );
@@ -316,7 +315,7 @@ TEST( FreezeHoldsTheVectorField )
 	// Freeze, then move the content the other way. A frozen field must ignore
 	// this completely — that is what makes the bloom keep flowing in one
 	// direction while the underlying clip does something else.
-	params.motionFreeze = 1.0f;
+	params.motionSmoothing = 1.0f;
 	for( int frame = 8; frame < 14; ++frame )
 	{
 		rig.PushShifted( shift, 0.0f, params, frame );
@@ -691,7 +690,7 @@ TEST( MoshingHoldsPixelsThroughACut )
 		}
 
 		params.moshAmount   = moshAmount;
-		params.motionFreeze = freeze;
+		params.motionSmoothing = freeze;
 
 		const std::vector< uint8_t > white = MakeSolid( FRAME_WIDTH, FRAME_HEIGHT, 255, 255, 255 );
 		for( int frame = 10; frame < 24; ++frame )
@@ -803,7 +802,7 @@ TEST( DecayIsIndependentOfFrameRate )
 		// identical across both runs. Freeze stays off here: turning it on
 		// before there is anything to hold just holds zero, and a zero field
 		// closes the gate so nothing decays at all.
-		params.motionFreeze = 0.0f;
+		params.motionSmoothing = 0.0f;
 		params.decay        = 0.0f;
 		float shift         = 0.0f;
 		for( int frame = 0; frame < 8; ++frame )
@@ -815,8 +814,12 @@ TEST( DecayIsIndependentOfFrameRate )
 		// One second of a constant white frame bleeding in. The field is frozen
 		// now, so both runs displace by identical vectors and only the decay
 		// arithmetic differs.
-		params.motionFreeze = 1.0f;
-		params.decay        = 0.9f;
+		params.motionSmoothing = 1.0f;
+		// 0.45 under the geometric curve is a 0.85s half-life — what 0.9 used
+		// to mean under the linear one. The test is about frame-rate
+		// independence, not about a particular slider position, so it keeps
+		// the half-life it was written against.
+		params.decay        = 0.45f;
 		params.deltaTime    = 1.0f / stepsPerSecond;
 		const std::vector< uint8_t > white = MakeSolid( FRAME_WIDTH, FRAME_HEIGHT, 255, 255, 255 );
 		for( int step = 0; step < stepsPerSecond; ++step )
@@ -953,12 +956,13 @@ TEST( AdvanceRejectsUnusableInput )
 // needs editing, not necessarily that the code does.
 // ---------------------------------------------------------------------------
 
-TEST( FreezeMakesMotionLagInert )
+TEST( FullSmoothingMakesMotionLagInert )
 {
-	// Motion Lag reaches back through a 16-frame ring of vector fields. Freeze
-	// stops the ring updating, so every slot ends up holding the same vectors
-	// and each lag setting selects an identical field. Documented under "when a
-	// knob does nothing" — Bloom sets Freeze to 1.0, so Lag is dead in Bloom.
+	// Motion Lag reaches back through a 16-frame ring of vector fields. A full
+	// hold — Motion Smoothing at 1, which is what Freeze used to be — stops the
+	// ring updating, so every slot ends up holding the same vectors and each
+	// lag setting selects an identical field. Documented under "when a knob
+	// does nothing" — Bloom sets Smoothing to 1.0, so Lag is dead in Bloom.
 	Rig rig;
 	CHECK( rig.Setup( FRAME_WIDTH, FRAME_HEIGHT ) );
 
@@ -982,7 +986,7 @@ TEST( FreezeMakesMotionLagInert )
 	CHECK( MeanVectorDifference( unfrozen0, unfrozen15 ) > 1e-4f );
 
 	// Now freeze, for longer than the ring is deep, with motion still happening.
-	params.motionFreeze = 1.0f;
+	params.motionSmoothing = 1.0f;
 	for( int i = 0; i < 20; ++i, ++frame )
 	{
 		rig.PushShifted( shift, 0.0f, params, frame );
@@ -1008,7 +1012,8 @@ TEST( FullMoshAmountMasksTheBurstControls )
 	// gate is max( Mosh Amount + audio, held ), so at Mosh Amount 1.0 the burst
 	// machinery cannot raise a level that is already at the ceiling. Trigger,
 	// Hold, Auto Mode, Cut Sensitivity, Burst Length and Beat Divisor all go
-	// inert together — and every Style preset sets Mosh Amount to 1.0.
+	// inert together. Every Style preset used to set it there; none does now,
+	// and that is why.
 	auto levelAfter = []( float moshAmount, bool trigger ) {
 		Rig rig;
 		if( !rig.Setup( 128, 128 ) )

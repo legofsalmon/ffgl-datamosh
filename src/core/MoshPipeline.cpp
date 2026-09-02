@@ -401,7 +401,7 @@ void MoshPipeline::PassFlowPost( const MoshParams& params )
 	                                          luma.Front().GetMipLevels() ) );
 	// The furthest the pyramid can legitimately reach. Anything beyond it is a
 	// bad match, not motion, so this is where it gets cut off.
-	const float maxPixels = std::min( 256.0f, std::max( 8.0f, 4.0f * ( 1 << ( levels - 1 ) ) ) );
+	maxPixels = std::min( 256.0f, std::max( 8.0f, 4.0f * ( 1 << ( levels - 1 ) ) ) );
 
 	ffglex::ScopedShaderBinding shaderBinding( flowPostShader.GetGLID() );
 	ffglex::ScopedFBOBinding    fboBinding( flowHistory.Next().GetFBO(), ffglex::ScopedFBOBinding::RB_REVERT );
@@ -414,7 +414,7 @@ void MoshPipeline::PassFlowPost( const MoshParams& params )
 	flowPostShader.Set( "FlowRes", static_cast< float >( flowWidth ), static_cast< float >( flowHeight ) );
 	flowPostShader.Set( "FrameRes", static_cast< float >( frameWidth ), static_cast< float >( frameHeight ) );
 	flowPostShader.Set( "Smoothing", params.motionSmoothing );
-	flowPostShader.Set( "Freeze", params.motionFreeze );
+	flowPostShader.Set( "DeltaTime", params.deltaTime );
 	flowPostShader.Set( "Softness", params.softness );
 	flowPostShader.Set( "Quantise", params.motionQuantise );
 	flowPostShader.Set( "BlockPixels", static_cast< float >( activeBlockSize ) );
@@ -450,12 +450,18 @@ void MoshPipeline::PassMosh( const MoshParams& params )
 	moshShader.Set( "Softness", params.softness );
 	moshShader.Set( "PelSnap", params.pelSnap );
 	moshShader.Set( "Direction", params.invertDirection ? -1.0f : 1.0f );
-	moshShader.Set( "ThresholdPixels", params.motionThreshold * THRESHOLD_PIXEL_RANGE );
+	// Squared: per-frame motion on ordinary footage is mostly 0.5–3px, so a
+	// linear 0–8px slider keeps the whole decision in its bottom quarter and
+	// turns the rest into a wall. t² puts 0.5 at 2px instead of 4. Endpoints
+	// are unchanged. Then clamped below the pyramid's reach, so no Quality
+	// setting can make the gate unclearable.
+	const float t = params.motionThreshold;
+	moshShader.Set( "ThresholdPixels", std::min( t * t * THRESHOLD_PIXEL_RANGE, maxPixels * 0.75f ) );
 	moshShader.Set( "Decay", params.decay );
 	moshShader.Set( "Corruption", params.corruption );
 	moshShader.Set( "BlockRepeat", params.blockRepeat );
 	moshShader.Set( "ChromaDrift", params.chromaDrift );
-	moshShader.Set( "FrameSeed", static_cast< float >( params.frame ) );
+	moshShader.Set( "CorruptEpoch", static_cast< float >( params.corruptEpoch ) );
 	moshShader.Set( "DeltaTime", params.deltaTime );
 	moshShader.Set( "HasHistory", hasHistory ? 1 : 0 );
 	moshShader.Set( "MaxUV", 1.0f, 1.0f );
@@ -482,6 +488,19 @@ bool MoshPipeline::Advance( const FrameInputs& inputs, const MoshParams& params 
 	const int blockSize = std::max( 2, params.blockSize );
 	if( !EnsureResources( inputs.width, inputs.height, blockSize ) )
 		return false;
+
+	// Reset is a keyframe, so it has to discard the history and not just the
+	// control level. Before this it zeroed one texel of state, and a vector
+	// field frozen across a cut survived it permanently. Dropping hasHistory
+	// makes the mosh pass take its first-frame path and write the live frame
+	// into the accumulation buffer — which is what makes this a keyframe, and
+	// why the buffer is not cleared to black: a zeroed buffer under a level
+	// still ramping down is a dark flash on a panic button.
+	if( params.reset )
+	{
+		flowHistory.Clear();
+		hasHistory = false;
+	}
 
 	PassIngest( inputs );
 	PassLuma( inputs );

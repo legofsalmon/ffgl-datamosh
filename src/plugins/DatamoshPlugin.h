@@ -98,6 +98,27 @@ protected:
 	std::shared_ptr< ffglqs::ParamFFT > audioParam;
 
 	unsigned int styleParamIndex = NO_PARAM;
+
+	unsigned int autoModeIndex       = NO_PARAM;
+	unsigned int cutSensitivityIndex = NO_PARAM;
+	unsigned int beatDivisorIndex    = NO_PARAM;
+
+	/// Cut Sensitivity only means anything in On Cut, and Beat Divisor only in
+	/// On Beat; whichever mode is armed, the other control is inert. Hiding it
+	/// is feedback expressed as layout — what is on screen is what is live.
+	///
+	/// SetParamVisibility mutates the record in place. It is not SetParamInfo,
+	/// whose push_back is the phantom-parameter trap in CLAUDE.md, and the
+	/// SDK's own comment says Resolume honours the event. If a host ignores
+	/// it, nothing hides and nothing breaks.
+	void ApplyAutoModeVisibility( bool raiseEvent )
+	{
+		if( autoModeIndex == NO_PARAM || cutSensitivityIndex == NO_PARAM || beatDivisorIndex == NO_PARAM )
+			return;
+		const int mode = OptionValue( "Auto Mode" );
+		this->SetParamVisibility( cutSensitivityIndex, mode == 1, raiseEvent );
+		this->SetParamVisibility( beatDivisorIndex, mode == 2, raiseEvent );
+	}
 	/// Guards the reentry caused by a style writing its own parameters back
 	/// through the host's setter.
 	bool         applyingStyle   = false;
@@ -116,6 +137,14 @@ protected:
 	double lastHostTime  = 0.0;
 	bool   hostTimeValid = false;
 	int    frameCounter  = 0;
+
+	/// Corruption seed. Advances on eighth notes while the host runs a clock,
+	/// and every six frames when it does not (bar phase stops moving), so a
+	/// damaged block stays damaged for a musical duration rather than
+	/// re-rolling every frame into 60Hz shimmer.
+	int   corruptEpoch = 0;
+	int   lastEighth   = -1;
+	float lastBarPhase = -1.0f;
 	/// Wall-clock time banked by calls the frame gate skipped, so a burst still
 	/// runs for the number of seconds it was set to.
 	float  pendingDeltaTime = 0.0f;
@@ -144,6 +173,9 @@ enum class Style : int
 	Drag,
 	Liquid,
 	Corrupt,
+	/// The factory panel. Appended, never inserted: the value is the dropdown
+	/// position and a saved composition stores the position.
+	Default,
 };
 
 template< typename HostBase >
@@ -164,9 +196,19 @@ void DatamoshPlugin< HostBase >::DeclareCommonParams()
 	                                           { "Bloom", 2.0f },
 	                                           { "Drag", 3.0f },
 	                                           { "Liquid", 4.0f },
-	                                           { "Corrupt", 5.0f } },
+	                                           { "Corrupt", 5.0f },
+	                                           // Appended, never inserted: the
+	                                           // value is the position, and a
+	                                           // saved comp stores the position.
+	                                           { "Default", 6.0f } },
 	                                         0 ) );
-	AddGrouped( "Mosh", ParamRange::Create( "Mosh Amount", 0.0f, Range( 0.0f, 1.0f ) ) );
+	// 0.3 rather than 0: a fresh instance that is a pixel-exact passthrough is
+	// indistinguishable from a plugin that failed to load — this codebase's
+	// first documented trap, made the default — and it caught the author. A
+	// non-zero default is only survivable because the slider is now a hold
+	// time; under the old raw-coefficient taper any non-zero value was either
+	// invisible or catastrophic, which is why it was 0.
+	AddGrouped( "Mosh", ParamRange::Create( "Mosh Amount", 0.3f, Range( 0.0f, 1.0f ) ) );
 	AddGrouped( "Mosh", ParamTrigger::Create( "Trigger" ) );
 	// Played rather than fired. A boolean, not a ParamTrigger, for two reasons:
 	// consumeAllTrigger() zeroes every ParamTrigger after each rendered frame,
@@ -176,28 +218,47 @@ void DatamoshPlugin< HostBase >::DeclareCommonParams()
 	AddGrouped( "Mosh", ParamBool::Create( "Hold", false ) );
 	AddGrouped( "Mosh", ParamTrigger::Create( "Reset" ) );
 	AddGrouped( "Mosh", ParamOption::Create( "Auto Mode",
-	                                         { { "Manual", 0.0f }, { "On Cut", 1.0f }, { "On Beat", 2.0f } },
+	                                         // "(Comp)" because the detector only sees cuts
+	                                         // BETWEEN layers when the effect is on the
+	                                         // composition — the classic transition. On a
+	                                         // layer it fires only on that layer's own
+	                                         // clip changes.
+	                                         { { "Manual", 0.0f }, { "On Cut (Comp)", 1.0f }, { "On Beat", 2.0f } },
 	                                         0 ) );
 	AddGrouped( "Mosh", ParamRange::Create( "Cut Sensitivity", 0.5f, Range( 0.0f, 1.0f ) ) );
 	AddGrouped( "Mosh", ParamRange::Create( "Burst Length", 1.0f, Range( 0.05f, 8.0f ) ) );
 	AddGrouped( "Mosh", ParamOption::Create( "Beat Divisor",
-	                                         { { "1", 1.0f }, { "2", 2.0f }, { "4", 4.0f }, { "8", 8.0f }, { "16", 16.0f } },
+	                                         // Labelled in beats and bars, because a bare
+	                                         // 1/2/4/8/16 next to "On Beat" reads to any
+	                                         // musician as note values — where 2 means
+	                                         // LONGER. Here it means less often. The stored
+	                                         // values are untouched; BEATS_PER_BAR is 4.
+	                                         { { "1 Beat", 1.0f }, { "2 Beats", 2.0f }, { "1 Bar", 4.0f },
+	                                           { "2 Bars", 8.0f }, { "4 Bars", 16.0f } },
 	                                         2 ) );
 
 	// --- how the motion behaves ---
 	AddGrouped( "Motion", ParamRange::Create( "Motion Gain", 1.0f, Range( 0.0f, 4.0f ) ) );
-	AddGrouped( "Motion", ParamRange::Create( "Freeze", 0.0f, Range( 0.0f, 1.0f ) ) );
+	// Freeze used to sit here. It was the same operation as Motion Smoothing
+	// applied a second time — provably, and measured identical to every digit —
+	// so it was folded into Smoothing, which now reaches a full hold at 1.
 	AddGrouped( "Motion", ParamRange::Create( "Motion Smoothing", 0.3f, Range( 0.0f, 1.0f ) ) );
 	AddGrouped( "Motion", ParamRange::Create( "Motion Threshold", 0.15f, Range( 0.0f, 1.0f ) ) );
 	AddGrouped( "Motion", ParamOption::Create( "Block Size",
-	                                           { { "4", 4.0f }, { "8", 8.0f }, { "16", 16.0f }, { "32", 32.0f } },
+	                                           { { "4 px", 4.0f }, { "8 px", 8.0f }, { "16 px", 16.0f }, { "32 px", 32.0f } },
 	                                           2 ) );
 	AddGrouped( "Motion", ParamRange::Create( "Softness", 0.0f, Range( 0.0f, 1.0f ) ) );
-	AddGrouped( "Motion", ParamRange::Create( "Pel Snap", 1.0f, Range( 0.0f, 1.0f ) ) );
+	// "Pixel", not "pel". Pel is 1993 MPEG-committee vocabulary that the docs
+	// had to gloss before they could explain the control.
+	AddGrouped( "Motion", ParamRange::Create( "Pixel Snap", 1.0f, Range( 0.0f, 1.0f ) ) );
 	AddGrouped( "Motion", ParamBool::Create( "Invert Motion", false ) );
 
 	// --- getting it wrong on purpose ---
-	AddGrouped( "Damage", ParamRange::CreateInteger( "Motion Lag", 0, Range( 0.0f, 15.0f ) ) );
+	// 2, not 0. An accurate estimator reconstructs the frame, which is correct
+	// and far too clean to read as a broken codec; three of the five presets
+	// raise this and the docs say to raise it first. 0 is the version nobody
+	// wants.
+	AddGrouped( "Damage", ParamRange::CreateInteger( "Motion Lag", 2, Range( 0.0f, 15.0f ) ) );
 	AddGrouped( "Damage", ParamRange::Create( "Block Repeat", 0.0f, Range( 0.0f, 1.0f ) ) );
 	AddGrouped( "Damage", ParamRange::Create( "Quantise", 0.0f, Range( 0.0f, 1.0f ) ) );
 	AddGrouped( "Damage", ParamRange::Create( "Corruption", 0.0f, Range( 0.0f, 1.0f ) ) );
@@ -223,7 +284,10 @@ void DatamoshPlugin< HostBase >::DeclareCommonParams()
 	// distribution, they are three lines to restore — but they must not come
 	// back without a test that feeds a realistic spectrum rather than a flat one.
 	AddGrouped( "Sync", ParamOption::Create( "Audio Band",
-	                                         { { "Volume", 0.0f }, { "Bass", 1.0f } },
+	                                         // "Full Range", not "Volume": a musician reads
+	                                         // Volume as an amplitude and Bass as a band,
+	                                         // which puts two kinds of thing in one list.
+	                                         { { "Full Range", 0.0f }, { "Bass", 1.0f } },
 	                                         1 ) );
 
 	// --- output ---
@@ -234,9 +298,20 @@ void DatamoshPlugin< HostBase >::DeclareCommonParams()
 
 	// Exactly the parameters ApplyStyle writes. Nothing else can invalidate a
 	// style, so Trigger, Mix, Quality and the rest leave the dropdown alone.
+	autoModeIndex       = ParamIndex( "Auto Mode" );
+	cutSensitivityIndex = ParamIndex( "Cut Sensitivity" );
+	beatDivisorIndex    = ParamIndex( "Beat Divisor" );
+	// No event at construction — the host has not looked yet.
+	ApplyAutoModeVisibility( false );
+
 	static const char* const MANAGED[] = {
-		"Mosh Amount", "Motion Gain", "Freeze", "Motion Smoothing", "Motion Threshold",
-		"Softness", "Pel Snap", "Motion Lag", "Block Repeat", "Quantise",
+		// Mosh Amount is deliberately absent. A preset never writes a
+		// performance control — a synth patch does not recall the mod wheel —
+		// and Mosh Amount is this plugin's mod wheel. Its absence here also
+		// means riding the master slider on a preset no longer flips the
+		// dropdown to Custom, so the panel keeps saying which look you are in.
+		"Motion Gain", "Motion Smoothing", "Motion Threshold",
+		"Softness", "Pixel Snap", "Motion Lag", "Block Repeat", "Quantise",
 		"Corruption", "Chroma Drift", "Decay", "Block Size"
 	};
 	for( const char* name : MANAGED )
@@ -337,13 +412,19 @@ void DatamoshPlugin< HostBase >::ApplyStyle( int style )
 	applyingStyle = true;
 
 	// Shared starting point, so each style only states what makes it itself.
-	PushParam( "Mosh Amount", 1.0f );
+	//
+	// Mosh Amount is not here, and that is the most important line in this
+	// function. Every preset used to push it to 1.0, which saturates the gate
+	// — max( MoshAmount + audio, held ) — and silently disabled Trigger, Hold,
+	// Auto Mode, Cut Sensitivity, Burst Length, Beat Divisor and Audio Amount
+	// in the same instant. Picking a look was the gesture that disarmed
+	// everything you would play. A style now describes character; the gate
+	// stays the operator's.
 	PushParam( "Motion Gain", 1.0f );
-	PushParam( "Freeze", 0.0f );
 	PushParam( "Motion Smoothing", 0.3f );
 	PushParam( "Motion Threshold", 0.0f );
 	PushParam( "Softness", 0.0f );
-	PushParam( "Pel Snap", 1.0f );
+	PushParam( "Pixel Snap", 1.0f );
 	PushParam( "Motion Lag", 0.0f );
 	PushParam( "Block Repeat", 0.0f );
 	PushParam( "Quantise", 0.0f );
@@ -364,9 +445,9 @@ void DatamoshPlugin< HostBase >::ApplyStyle( int style )
 
 	case Style::Bloom:
 		// Vector field held, so motion piles up on itself and explodes.
-		PushParam( "Freeze", 1.0f );
+		// Smoothing at 1 is the full hold that used to need Freeze.
 		PushParam( "Motion Gain", 1.5f );
-		PushParam( "Motion Smoothing", 0.6f );
+		PushParam( "Motion Smoothing", 1.0f );
 		PushParam( "Softness", 0.2f );
 		PushParam( "Decay", 0.1f );
 		break;
@@ -383,7 +464,7 @@ void DatamoshPlugin< HostBase >::ApplyStyle( int style )
 		// Per-pixel flow with no snapping: the smooth end of the range.
 		PushParam( "Softness", 1.0f );
 		PushParam( "Motion Smoothing", 0.5f );
-		PushParam( "Pel Snap", 0.0f );
+		PushParam( "Pixel Snap", 0.0f );
 		PushOption( "Block Size", 8.0f );
 		break;
 
@@ -395,6 +476,17 @@ void DatamoshPlugin< HostBase >::ApplyStyle( int style )
 		PushParam( "Quantise", 0.7f );
 		PushParam( "Chroma Drift", 0.4f );
 		PushParam( "Motion Lag", 4.0f );
+		break;
+
+	case Style::Default:
+		// The factory panel, reachable from the same list as the looks. The
+		// baseline above is the styles' common starting point, which is not
+		// quite the same thing: two declared defaults differ from it. This
+		// exists because selecting Custom restores nothing — it is a status,
+		// not a destination — and there was no way back from a preset that
+		// had left Motion Threshold high enough to shut the gate frame-wide.
+		PushParam( "Motion Threshold", 0.15f );
+		PushParam( "Motion Lag", 2.0f );
 		break;
 
 	case Style::Custom:
@@ -409,6 +501,11 @@ template< typename HostBase >
 FFResult DatamoshPlugin< HostBase >::SetFloatParameter( unsigned int index, float value )
 {
 	const FFResult result = HostBase::SetFloatParameter( index, value );
+
+	// Auto Mode is not style-managed, so this sits above the style logic and
+	// runs whether or not a style is being applied.
+	if( index == autoModeIndex )
+		ApplyAutoModeVisibility( true );
 
 	if( applyingStyle || styleParamIndex == NO_PARAM )
 		return result;
@@ -490,12 +587,11 @@ MoshParams DatamoshPlugin< HostBase >::ReadParams() const
 	params.beatDivisor = std::max( 1, OptionValue( "Beat Divisor" ) );
 
 	params.motionGain      = ParamValue( "Motion Gain" );
-	params.motionFreeze    = ParamValue( "Freeze" );
 	params.motionSmoothing = ParamValue( "Motion Smoothing" );
 	params.motionThreshold = ParamValue( "Motion Threshold" );
 	params.blockSize       = std::max( 2, OptionValue( "Block Size" ) );
 	params.softness        = ParamValue( "Softness" );
-	params.pelSnap         = ParamValue( "Pel Snap" );
+	params.pelSnap         = ParamValue( "Pixel Snap" );
 	params.invertDirection = ParamValue( "Invert Motion" ) > 0.5f;
 
 	params.decay          = ParamValue( "Decay" );
@@ -569,6 +665,17 @@ FFResult DatamoshPlugin< HostBase >::ProcessOpenGL( ProcessOpenGLStruct* pGL )
 	// call, and time that passed during a skipped call still passed.
 	pendingDeltaTime += std::min( 0.1f, std::max( 1.0f / 240.0f, this->deltaTime ) );
 	params.frame = frameCounter;
+
+	{
+		const int eighth = static_cast< int >( std::floor( params.barPhase * 8.0f ) );
+		if( eighth != lastEighth )
+			++corruptEpoch;
+		else if( params.barPhase == lastBarPhase && frameCounter % 6 == 0 )
+			++corruptEpoch;
+		lastEighth   = eighth;
+		lastBarPhase = params.barPhase;
+	}
+	params.corruptEpoch = corruptEpoch;
 
 	params.audioLevel = AudioLevel();
 

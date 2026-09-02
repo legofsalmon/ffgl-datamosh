@@ -8,6 +8,93 @@ Notable changes to ffgl-datamosh. Format follows
 
 Nothing yet.
 
+## [0.2.0] — 2026-09-02
+
+**Saved compositions change appearance.** Several sliders now mean something
+different at the same position. FFGL has no migration hook, so this release
+takes every such change at once rather than breaking compositions five times
+across five releases. The endpoints of every remapped control are preserved:
+0 still means what it meant and 1 still means what it meant. It is the middle
+that moved, and it moved because the middle was where nothing happened.
+
+### Changed
+
+- **Mosh Amount is a hold time on a log scale, not a per-frame retention
+  fraction.** The old slider spent most of its travel inside the first few
+  frames of hold and crushed the entire usable range into its top tenth —
+  measured: 0.5 bought 0.3% of the effect, 0.9 bought 14%, half of it sat
+  above 0.95. It was also frame-rate dependent, three lines below a comment
+  in the same shader condemning exactly that: a composition authored at 60 fps
+  moshed visibly harder at 30. Now 0.5 is a 0.45 s hold at any frame rate.
+  The gate stays outside the map as a linear multiplier — folded into the
+  exponent it would lift a barely-moving pixel to a near-full hold and erase
+  Motion Threshold. This also fixes the burst release, which was nominally a
+  250 ms ramp and perceptually a 25 ms snap, and it restores usable MIDI
+  resolution to a control that previously had about three bits of it.
+- **Decay is geometric.** `mix(8, 0.05, d)` put 0.5 at a 4 s half-life —
+  longer than any burst — so nothing happened for four fifths of the slider
+  and then it collapsed. Same endpoints; 0.5 is now 0.63 s.
+- **Motion Threshold is squared.** Per-frame motion on ordinary footage is
+  mostly 0.5–3 px, so a linear 0–8 px slider kept the whole decision in its
+  bottom quarter and made the rest a wall. 0.5 is 2 px instead of 4, which
+  also turns the Drag preset from "gate shut frame-wide" into "only fast
+  things smear" — the trap that caught the author.
+- **Motion Threshold is clamped below the estimator's reach.** At Quality
+  Low the pyramid reaches 8 px and so did the top of the slider, so Quality
+  Low with Motion Threshold at 1.0 was a total bypass, indistinguishable from
+  a plugin that failed to load. No Quality setting can make the gate
+  unclearable now.
+- **Motion Smoothing absorbs Freeze.** They were the same operation applied
+  twice — two successive mixes toward the same target compose to one,
+  `1-(1-S)(1-F)`, symmetric — and a sweep measured their response curves
+  identical to every digit. One axis, two names. Smoothing is now a hold
+  time on a log scale like Mosh Amount, and reaches the full hold at 1 that
+  used to need Freeze. The Bloom preset sets Smoothing 1.0.
+- **Presets no longer write Mosh Amount.** Every style pushed it to 1.0, which
+  saturated `max(MoshAmount + audio, held)` and silently disabled Trigger,
+  Hold, Auto Mode, Cut Sensitivity, Burst Length, Beat Divisor and Audio
+  Amount in the same instant — picking a look was the gesture that disarmed
+  everything you would play. A style describes character; the gate stays the
+  operator's. Riding Mosh Amount on a preset no longer flips the dropdown to
+  Custom either.
+- **Mosh Amount defaults to 0.3, Motion Lag to 2.** A fresh instance that is
+  a pixel-exact passthrough is indistinguishable from a plugin that failed to
+  load — this codebase's first documented trap, made the default. A non-zero
+  default is only survivable now that the slider is a hold time; under the old
+  taper any non-zero value was either invisible or catastrophic.
+- **Reset is a keyframe.** It used to zero one texel of control state, so a
+  vector field frozen across a cut survived it permanently. It now discards
+  the flow history and reseeds the accumulation buffer from the live frame —
+  from live, not to black, because a zeroed buffer under a level still ramping
+  down is a dark flash on a panic button.
+- **Corruption persists.** The damaged-block set was re-rolled from the frame
+  counter every frame, so Corruption read as 60 Hz shimmer. The point of
+  datamosh is that errors persist. It now advances on eighth notes while the
+  host runs a clock, and every six frames otherwise.
+- **Cut Sensitivity and Beat Divisor hide when their mode is not armed**, via
+  the SDK's in-place `SetParamVisibility`, which its own comment documents as
+  honoured by Resolume. What is on screen is what is live. If a host ignores
+  the event, nothing hides and nothing breaks.
+- Option labels: `On Cut` → `On Cut (Comp)`, because the detector only sees
+  cuts between layers when the effect is on the composition; Beat Divisor
+  `1/2/4/8/16` → `1 Beat / 2 Beats / 1 Bar / 2 Bars / 4 Bars`, because a bare
+  column of numbers next to "On Beat" reads to any musician as note values,
+  where 2 means *longer*; Block Size gains `px`; Audio Band `Volume` →
+  `Full Range`. Labels only; stored values are untouched.
+- `Pel Snap` → **`Pixel Snap`**. Pel is 1993 MPEG-committee vocabulary.
+- The mixer's `Motion Source` is grouped instead of floating above the
+  panel, and the inherited `mixVal` is grouped with it. Hiding `mixVal`
+  waits on one check in Resolume — whether the host special-cases index 0 of
+  a mixer as the blend amount.
+
+### Added
+
+- **`Default` in the Style dropdown.** Selecting Custom restores nothing — it
+  is a status, not a destination — so there was no way back from a preset
+  that had left Motion Threshold high enough to shut the gate. Appended at
+  the end of the list, never inserted: the value is the position and a saved
+  composition stores the position.
+
 ## [0.1.5] — 2026-08-13
 
 ### Removed
@@ -270,7 +357,8 @@ Two defects caught in review before release, both of which fail silently:
   Resolume then silently will not load them; the install notes carry the
   `xattr -dr com.apple.quarantine` fix.
 
-[Unreleased]: https://github.com/legofsalmon/ffgl-datamosh/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/legofsalmon/ffgl-datamosh/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/legofsalmon/ffgl-datamosh/releases/tag/v0.2.0
 [0.1.5]: https://github.com/legofsalmon/ffgl-datamosh/releases/tag/v0.1.5
 [0.1.4]: https://github.com/legofsalmon/ffgl-datamosh/releases/tag/v0.1.4
 [0.1.3]: https://github.com/legofsalmon/ffgl-datamosh/releases/tag/0.1.3

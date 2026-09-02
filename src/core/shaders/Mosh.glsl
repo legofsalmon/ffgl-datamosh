@@ -28,9 +28,19 @@ uniform float Decay;
 uniform float Corruption;
 uniform float BlockRepeat;
 uniform float ChromaDrift;
-uniform float FrameSeed;
+uniform float CorruptEpoch;
 uniform float DeltaTime;
 uniform bool  HasHistory;
+
+// Mosh Amount maps to a hold time between these, log-spaced, so that equal
+// slider travel is an equal ratio of hold — the taper every delay and reverb
+// control uses, and the one a fader hand already knows.
+const float HOLD_MIN_SECONDS = 0.05;
+const float HOLD_MAX_SECONDS = 4.0;
+// Linear fade-in over this much of the bottom of the travel, so the fader is
+// gentle where a hand parks it and slams back to. A steep onset here would
+// just move the cliff to the end of the fader an operator rests at.
+const float HOLD_FADE_IN = 0.12;
 
 in vec2 uv;
 out vec4 fragColor;
@@ -70,11 +80,11 @@ void main()
 	if( Corruption > 0.0 )
 	{
 		vec2  blockId = floor( uv * FlowRes );
-		float roll    = Hash( blockId, FrameSeed );
+		float roll    = Hash( blockId, CorruptEpoch );
 		if( roll < Corruption )
 		{
-			float angle = Hash( blockId, FrameSeed + 17.0 ) * 6.2831853;
-			float scale = Hash( blockId, FrameSeed + 41.0 ) * 2.0;
+			float angle = Hash( blockId, CorruptEpoch + 17.0 ) * 6.2831853;
+			float scale = Hash( blockId, CorruptEpoch + 41.0 ) * 2.0;
 			flow = mat2( cos( angle ), -sin( angle ), sin( angle ), cos( angle ) ) * flow * scale;
 		}
 	}
@@ -98,11 +108,11 @@ void main()
 	if( BlockRepeat > 0.0 )
 	{
 		vec2  blockId = floor( uv * FlowRes );
-		float roll    = Hash( blockId, FrameSeed + 91.0 );
+		float roll    = Hash( blockId, CorruptEpoch + 91.0 );
 		if( roll < BlockRepeat )
 		{
-			vec2 direction = vec2( Hash( blockId, FrameSeed + 7.0 ),
-			                       Hash( blockId, FrameSeed + 13.0 ) ) * 2.0 - 1.0;
+			vec2 direction = vec2( Hash( blockId, CorruptEpoch + 7.0 ),
+			                       Hash( blockId, CorruptEpoch + 13.0 ) ) * 2.0 - 1.0;
 			sampleUV += sign( direction ) / FlowRes;
 		}
 	}
@@ -135,11 +145,38 @@ void main()
 	float retention = 1.0;
 	if( Decay > 0.0 )
 	{
-		float halfLife = mix( 8.0, 0.05, clamp( Decay, 0.0, 1.0 ) );
+		// Geometric, not linear, between the same endpoints: equal travel is
+		// an equal ratio of half-life. Linear put 0.5 at a 4s half-life —
+		// longer than any burst — so nothing happened for four fifths of the
+		// slider and then it collapsed. Now 0.5 is 0.63s.
+		float halfLife = 8.0 * pow( 0.00625, clamp( Decay, 0.0, 1.0 ) );
 		retention      = exp2( -DeltaTime / halfLife );
 	}
 
-	float persistence = clamp( moshLevel * gate * retention, 0.0, 1.0 );
+	// Mosh Amount is a hold TIME on a log scale, not a per-frame retention
+	// fraction. A raw fraction decays geometrically, so a linear slider spent
+	// most of its travel inside the first few frames of hold and crushed the
+	// entire usable range into its top tenth — and, being per-frame, it meant
+	// something different at every frame rate, three lines below a comment
+	// condemning exactly that. Endpoints are preserved: 0 is still an exact
+	// passthrough and 1 is still an exact never-refresh.
+	//
+	// The gate stays OUTSIDE the map, as a linear multiplier. Folded into the
+	// exponent it would lift a barely-moving pixel to a near-full hold and
+	// erase Motion Threshold.
+	float keep;
+	if( moshLevel >= 0.995 )
+	{
+		keep = 1.0;
+	}
+	else
+	{
+		float hold = HOLD_MIN_SECONDS * pow( HOLD_MAX_SECONDS / HOLD_MIN_SECONDS, moshLevel );
+		keep       = exp2( -DeltaTime / hold );
+		keep      *= clamp( moshLevel / HOLD_FADE_IN, 0.0, 1.0 );
+	}
+
+	float persistence = clamp( keep * gate * retention, 0.0, 1.0 );
 
 	vec4 result = mix( live, moshed, persistence );
 
