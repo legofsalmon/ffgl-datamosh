@@ -50,6 +50,7 @@
 			<li><a href="#damage">Damage</a></li>
 			<li><a href="#sync">Sync</a></li>
 			<li><a href="#output">Output</a></li>
+			<li><a href="#mask">Mask</a></li>
 			<li><a href="#mixer">Mixer only</a></li>
 			<li><a href="#interactions">How they interact</a></li>
 		</ul>
@@ -518,6 +519,73 @@
 			</table>
 			</div>
 
+			<h2 id="mask">Mask</h2>
+
+			<p>
+				Where the mosh is <em>allowed</em> to land. The mask comes from the
+				brightness of the <strong>motion</strong> input &mdash; the clip's own in
+				the effect, the other layer's in the mixer &mdash; so whichever layer
+				supplies the movement also paints the shape, and
+				<strong>Motion Source</strong> flips both together.
+			</p>
+
+			<div class="table-wrap">
+			<table>
+				<thead>
+					<tr><th>Parameter</th><th>Range</th><th>Default</th><th>What it does</th></tr>
+				</thead>
+				<tbody>
+					<tr>
+						<td>Mask Amount</td>
+						<td>0 &ndash; 1</td>
+						<td>0</td>
+						<td class="desc">
+							Depth, not gain. At 0 the mask is exactly off and nothing changes.
+							Turning it up lets bright regions hold pixels while dark ones keep
+							refreshing, with everything in between held proportionally &mdash;
+							it is a gradient, not a key, so a soft edge stays soft.
+						</td>
+					</tr>
+					<tr>
+						<td>Mask Invert</td>
+						<td>on / off</td>
+						<td>off</td>
+						<td class="desc">
+							Mosh the dark parts instead of the bright ones. The image is
+							unchanged; only where the mosh sticks moves.
+						</td>
+					</tr>
+				</tbody>
+			</table>
+			</div>
+
+			<div class="note accent">
+				<span class="note-label">The mask needs the motion layer to move</span>
+				The mask multiplies the motion gate rather than replacing it, so a region
+				only moshes where it is <em>both</em> bright and moving. In the mixer that
+				means a still logo dropped on the motion layer does nothing &mdash; not
+				because of the mask, but because a static motion layer has never
+				transplanted anything. Scrolling text, a generator or a clip is the setup
+				this is for: bright, patterned and moving at once.
+			</div>
+
+			<div class="note warn">
+				<span class="note-label">A black frame at full mask is a black hole</span>
+				Genuinely dark footage with <strong>Mask Amount</strong> at 1 produces no
+				mosh anywhere, correctly &mdash; and a plugin producing no mosh emits a
+				pixel-exact copy of its input, which looks exactly like a plugin that
+				failed to load. If everything suddenly passes through untouched, Mask
+				Amount is the first thing to check.
+			</div>
+
+			<div class="note">
+				<span class="note-label">Alpha is a matte, free</span>
+				Resolume hands over premultiplied textures and the mask is computed
+				before that is undone, so a logo on a transparent background masks by its
+				alpha as well as its brightness &mdash; no keying step. A mask layer at a
+				different resolution is stretched to fit rather than letterboxed.
+			</div>
+
 			<h2 id="mixer">Mosh Transplant only</h2>
 
 			<p>
@@ -679,7 +747,10 @@
 				those flips the dropdown back to Custom. Everything else &mdash;
 				<strong>Mosh Amount</strong>, Trigger, Hold, Reset, Auto Mode, Cut
 				Sensitivity, Burst Length, Beat Divisor, Invert Motion, Audio, Mix,
-				Quality &mdash; is neither written nor watched. Change those and the dropdown keeps naming a preset, which is
+				Quality, <strong>Mask Amount</strong> and Mask Invert &mdash; is neither
+				written nor watched. The mask is out for the same reason Mosh Amount is:
+				a style describes a character, while a mask is where this instance sits
+				in a composition, and picking a look must never wipe it. Change those and the dropdown keeps naming a preset, which is
 				intended: they are how you play a look, not part of what the look is.
 			</div>
 

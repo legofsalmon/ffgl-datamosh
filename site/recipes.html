@@ -142,6 +142,24 @@ Chroma Drift     0.4</code></pre>
 				Size</strong> with it.
 			</div>
 
+			<h3>Painting where it lands</h3>
+			<p>
+				<strong>Mask Amount</strong> lets the brightness of the motion input decide
+				where the mosh is allowed to stick. In the effect that is the clip's own
+				brightness, so highlights smear and shadows stay clean — or the reverse
+				with <strong>Mask Invert</strong>.
+			</p>
+			<p>
+				In <strong>Mosh Transplant</strong> it is the more useful one: the mask
+				comes from the layer supplying the motion, not the pixels, so a layer of
+				scrolling text or a generator becomes a stencil that also drives the
+				movement. The mask needs that layer to be <em>moving</em> as well as
+				bright — a still logo transplants nothing, mask or no mask.
+			</p>
+			<pre><code>Mask Amount      0.8
+Mask Invert      off     &larr; on to mosh the shadows instead
+Motion Threshold 0.0     &larr; let the mask do the deciding</code></pre>
+
 			<h2 id="workflows">Live workflows</h2>
 
 			<h3>Playing it like a key</h3>
@@ -271,6 +289,11 @@ Chroma Drift     0.4</code></pre>
 				<li><strong>Mosh Amount is 1.0 and you are pressing Trigger or Hold.</strong>
 					The gate is already saturated, so they have nothing to add. Bring Mosh
 					Amount down to make room — 0 to play it entirely by hand.</li>
+				<li><strong>Mask Amount is up on dark footage.</strong> The mask lets
+					bright regions hold and dark ones refresh, so a dark shot at full mask
+					refuses to mosh anywhere — correctly, and identically to a plugin that
+					failed to load. It defaults to 0; if it reads anything else, that is
+					where to look.</li>
 				<li><strong>The footage is not moving.</strong> There is no motion to
 					estimate and nothing to smear. Datamosh needs movement the way a codec
 					does.</li>

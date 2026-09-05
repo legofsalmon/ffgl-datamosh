@@ -450,6 +450,10 @@ void MoshPipeline::PassMosh( const MoshParams& params )
 	// lands on content it does not belong to.
 	textures.Add( moshShader, "Flow", flowHistory.Delayed( params.motionLag ).GetTexture() );
 	textures.Add( moshShader, "State", state.Front().GetTexture() );
+	// luma.Swap() runs after this pass, so Back() is THIS frame's luma — and in
+	// the mixer that is the motion input, not the pixel input, which is what
+	// makes the motion layer's brightness the mask.
+	textures.Add( moshShader, "MaskLuma", luma.Back().GetTexture() );
 
 	moshShader.Set( "FrameRes", static_cast< float >( frameWidth ), static_cast< float >( frameHeight ) );
 	moshShader.Set( "FlowRes", static_cast< float >( flowWidth ), static_cast< float >( flowHeight ) );
@@ -469,6 +473,8 @@ void MoshPipeline::PassMosh( const MoshParams& params )
 	// so a vector that rounds away cannot close the gate with it.
 	moshShader.Set( "Quantise", params.motionQuantise );
 	moshShader.Set( "BlockPixels", static_cast< float >( activeBlockSize ) );
+	moshShader.Set( "MaskAmount", params.maskAmount );
+	moshShader.Set( "MaskInvert", params.maskInvert ? 1 : 0 );
 	moshShader.Set( "Decay", params.decay );
 	moshShader.Set( "Corruption", params.corruption );
 	moshShader.Set( "BlockRepeat", params.blockRepeat );
@@ -488,6 +494,8 @@ void MoshPipeline::PassMosh( const MoshParams& params )
 	lastMosh.corruptEpoch    = static_cast< float >( params.corruptEpoch );
 	lastMosh.thresholdPixels = thresholdPixels;
 	lastMosh.decay           = params.decay;
+	lastMosh.maskAmount      = params.maskAmount;
+	lastMosh.maskInvert      = params.maskInvert;
 	lastMosh.hasHistory      = hasHistory;
 
 	fboBinding.EndScope();

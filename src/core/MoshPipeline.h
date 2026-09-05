@@ -175,6 +175,8 @@ private:
 		float corruptEpoch    = 0.0f;
 		float thresholdPixels = 0.0f;
 		float decay           = 0.0f;
+		float maskAmount      = 0.0f;
+		bool  maskInvert      = false;
 		bool  hasHistory      = false;
 	} lastMosh;
 };
