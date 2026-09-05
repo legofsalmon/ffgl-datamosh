@@ -69,6 +69,34 @@ vec2 MoshFlowAt( sampler2D flowField, vec2 texUV, vec2 flowRes,
 	return flow;
 }
 
+/// Coarsen a motion vector onto a grid, the way a low-bitrate encoder has to.
+/// The stepped movement that produces is a large part of what reads as
+/// "compressed" rather than "warped".
+///
+/// This is applied to the DISPLACEMENT, after the gate has been measured on the
+/// true motion — not to the stored field. Two reasons, both learned the hard
+/// way. Quantising the stored field fed the quantiser its own output through
+/// the temporal blend, which latched: whatever grid point it started on, it
+/// stayed on, and starting at zero it stayed at zero. And quantising before the
+/// gate meant any motion below half a grid step rounded to zero, which closed
+/// the gate, which refreshed the block from the live frame — so the plugin
+/// rendered a pixel-exact passthrough exactly where it was asked to damage the
+/// image hardest. At the default block size the shipped Corrupt preset needed
+/// 3 px/frame of motion before it did anything at all.
+///
+/// Downstream of the gate, neither is possible. A vector that rounds to zero
+/// now means the block holds where it is without moving, which is what a
+/// skipped block does in a real decoder, rather than refreshing from a
+/// keyframe it never received.
+vec2 MoshQuantise( vec2 flow, float quantise, float blockPixels, vec2 frameRes )
+{
+	if( quantise <= 0.0 )
+		return flow;
+	float stepPixels = mix( 0.5, max( 1.0, blockPixels * 0.5 ), clamp( quantise, 0.0, 1.0 ) );
+	vec2  stepUV     = vec2( stepPixels ) / frameRes;
+	return round( flow / stepUV ) * stepUV;
+}
+
 /// Still regions keep refreshing normally; moving ones carry old pixels forward.
 /// Threshold at 0 moshes everything, which gives the full melt.
 float MoshGate( float motionPixels, float thresholdPixels )

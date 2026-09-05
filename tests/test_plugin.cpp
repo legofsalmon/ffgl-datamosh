@@ -434,13 +434,19 @@ TEST( EveryStylePresetChangesTheImage )
 		if( plugin.InitGL( &viewport ) != FF_SUCCESS )
 			return std::vector< float >();
 
+		// 1.5 px/frame, deliberately slow. This ran at 3 px/frame and passed on
+		// the exact edge of the Quantise dead zone rather than guarding it: one
+		// notch slower and Corrupt rendered nothing while this test stayed
+		// green. Ordinary footage is mostly 0.5-3 px/frame, so the slow end is
+		// where a preset has to be proved, not the fast end where every setting
+		// works.
 		float shift = 0.0f;
 		int   frame = 1;
 		auto  push  = [ & ]( int count ) {
 			for( int i = 0; i < count; ++i, ++frame )
 			{
 				host.Fill( 0, shift, 0.0f );
-				shift += 3.0f;
+				shift += 1.5f;
 				plugin.SetTime( frame / 60.0 );
 				ProcessOpenGLStruct pGL = host.Frame();
 				plugin.ProcessOpenGL( &pGL );

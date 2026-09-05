@@ -425,8 +425,6 @@ void MoshPipeline::PassFlowPost( const MoshParams& params )
 	flowPostShader.Set( "Smoothing", params.motionSmoothing );
 	flowPostShader.Set( "DeltaTime", params.deltaTime );
 	flowPostShader.Set( "Softness", params.softness );
-	flowPostShader.Set( "Quantise", params.motionQuantise );
-	flowPostShader.Set( "BlockPixels", static_cast< float >( activeBlockSize ) );
 	flowPostShader.Set( "MaxPixels", maxPixels );
 	flowPostShader.Set( "HasHistory", hasHistory ? 1 : 0 );
 	flowPostShader.Set( "MaxUV", 1.0f, 1.0f );
@@ -467,6 +465,10 @@ void MoshPipeline::PassMosh( const MoshParams& params )
 	const float t               = params.motionThreshold;
 	const float thresholdPixels = std::min( t * t * THRESHOLD_PIXEL_RANGE, maxPixels * 0.75f );
 	moshShader.Set( "ThresholdPixels", thresholdPixels );
+	// Quantise moved here from PassFlowPost: it belongs downstream of the gate,
+	// so a vector that rounds away cannot close the gate with it.
+	moshShader.Set( "Quantise", params.motionQuantise );
+	moshShader.Set( "BlockPixels", static_cast< float >( activeBlockSize ) );
 	moshShader.Set( "Decay", params.decay );
 	moshShader.Set( "Corruption", params.corruption );
 	moshShader.Set( "BlockRepeat", params.blockRepeat );

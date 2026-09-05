@@ -1020,4 +1020,54 @@ TEST( FullMoshAmountMasksTheBurstControls )
 	CHECK( levelAfter( 0.0f, true ) - levelAfter( 0.0f, false ) > 0.9f );
 }
 
+TEST( QuantiseDoesNotSilenceSlowMotion )
+{
+	// Quantise used to be applied to the stored vector field, upstream of the
+	// motion gate. Any motion below half a grid step therefore rounded to zero,
+	// zero motion closed the gate, and a closed gate refreshes the block from
+	// the live frame — so the plugin rendered a pixel-exact passthrough exactly
+	// where it had been asked to damage the image hardest.
+	//
+	// The grid step reaches half the macroblock, so at the default block size
+	// of 16 the dead zone ran to 3 px/frame, against this file's own note that
+	// per-frame motion on ordinary footage is mostly 0.5-3 px. The shipped
+	// Corrupt preset sets Quantise 0.7 and was inside it.
+	//
+	// Slow motion is the whole point of the test. At 6 px/frame every Quantise
+	// setting always worked, which is why nothing caught this.
+	auto departure = []( float pxPerFrame, float quantise ) {
+		std::vector< float > arm[ 2 ];
+		for( int i = 0; i < 2; ++i )
+		{
+			Rig rig;
+			if( !rig.Setup( 160, 128 ) )
+				return -1.0f;
+
+			MoshParams params      = RawEstimatorParams();
+			params.moshAmount      = ( i == 0 ) ? 0.0f : 0.8f;
+			params.motionQuantise  = quantise;
+			params.motionThreshold = 0.0f;
+			params.motionSmoothing = 0.3f;
+			params.softness        = 0.15f;
+
+			for( int frame = 0; frame < 24; ++frame )
+				rig.PushShifted( frame * pxPerFrame, 0.0f, params, frame );
+
+			arm[ i ] = ReadTarget( rig.pipeline.GetAccumulation() );
+			rig.Teardown();
+		}
+		return MeanInteriorDifference( arm[ 0 ], arm[ 1 ], 160, 128, 16 );
+	};
+
+	// Mosh Amount 0 is an exact passthrough, so this is distance from "nothing
+	// happened". Anything at or near zero means the effect is not running.
+	const float unquantised = departure( 1.5f, 0.0f );
+	CHECK( unquantised > 0.02f );
+
+	// Every Quantise setting, at motion far inside the old dead zone. Before
+	// the fix, 0.4 upwards measured 0.0000 here.
+	for( float quantise : { 0.4f, 0.5f, 0.7f, 0.85f, 1.0f } )
+		CHECK( departure( 1.5f, quantise ) > 0.02f );
+}
+
 }  // namespace datamosh::test

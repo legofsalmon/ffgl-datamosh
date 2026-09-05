@@ -34,8 +34,37 @@ Notable changes to ffgl-datamosh. Format follows
   — you cannot hold what does not exist — and the recipes page already says to
   let movement play first.
 
+- **`Quantise` silenced the effect entirely on ordinary footage.** It was
+  applied to the stored vector field, upstream of the motion gate, so any
+  motion below half a grid step rounded to zero — and zero motion closes the
+  gate, and a closed gate refreshes the block from the live frame. The result
+  was a pixel-exact passthrough exactly where the plugin had been asked to
+  damage the image hardest.
+
+  The step reaches half a macroblock, so at the default Block Size of 16 the
+  dead zone ran to 3 px/frame, against this codebase's own note that per-frame
+  motion on ordinary footage is mostly 0.5–3 px. The shipped `Corrupt` preset
+  sets Quantise 0.7 and sat inside it. Fixing the latch in the entry above was
+  necessary but not sufficient: it made Quantise reach the field, and this is
+  what the field then did with it.
+
+  Quantise now applies to the **displacement**, downstream of the gate, so a
+  vector that rounds away can no longer take the gate with it. A block whose
+  motion rounds to zero holds where it is without moving — which is what a
+  skipped block does in a real decoder — rather than refreshing from a keyframe
+  it never received. `Quantise` and `Motion Threshold` are now independent: one
+  decides how precisely motion is described, the other what counts as moving.
+  Moving it out of `FlowPost` also removes the feedback path that caused the
+  latch, so that bug cannot return in another form.
+
 ### Added
 
+- `QuantiseDoesNotSilenceSlowMotion` — every Quantise setting must still visibly
+  depart from passthrough at 1.5 px/frame. `EveryStylePresetChangesTheImage`
+  moved from 3 px/frame to the same 1.5, because at 3 it passed on the exact
+  edge of the dead zone: one notch slower and `Corrupt` rendered nothing while
+  the test stayed green. Presets have to be proved at the slow end, not the fast
+  end where every setting works.
 - `EveryStylePresetChangesTheImage` — each shipped preset must visibly depart
   from the live image. Written because both bugs above were combinations: every
   control was individually fine, and a per-parameter test with everything else at
