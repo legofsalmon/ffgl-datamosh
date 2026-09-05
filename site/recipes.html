@@ -293,6 +293,18 @@ Motion Threshold 0.0     &larr; let the mask do the deciding</code></pre>
 
 			<h2 id="nothing">When nothing is happening</h2>
 
+			<div class="note good">
+				<span class="note-label">Ask the plugin first</span>
+				Set <strong>View</strong> to <em>Motion</em>. Black means there is no
+				movement to work with and nothing below will help. Lit means there is, so
+				switch to <em>Gate</em>: red is <strong>Motion Threshold</strong> refusing
+				it, grey is the <strong>mask</strong>, dim green is the gate open with
+				nothing holding &mdash; and black there means the motion never reached the
+				gate at all. It is quicker than the list, and it cannot be wrong about
+				what the effect did, because it redraws the frame the effect just
+				rendered rather than recomputing one.
+			</div>
+
 			<p>
 				In the order worth checking, because each one masks everything below it.
 			</p>

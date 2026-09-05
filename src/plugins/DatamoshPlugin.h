@@ -318,6 +318,14 @@ void DatamoshPlugin< HostBase >::DeclareCommonParams()
 	// in Audio Band's slot. Position is permanent; tidiness is not.
 	AddGrouped( "Damage", ParamRange::Create( "Spread", 0.0f, Range( 0.0f, 1.0f ) ) );
 
+	// Appended last, for the same reason everything above it was. Not
+	// style-managed: a look is not a way of looking at it, and a preset that
+	// dragged the panel out of a diagnostic — or into one — would be a
+	// surprise either way.
+	AddGrouped( "Output", ParamOption::Create( "View",
+	                                           { { "Result", 0.0f }, { "Motion", 1.0f }, { "Gate", 2.0f } },
+	                                           0 ) );
+
 	// Exactly the parameters ApplyStyle writes. Nothing else can invalidate a
 	// style, so Trigger, Mix, Quality and the rest leave the dropdown alone.
 	autoModeIndex       = ParamIndex( "Auto Mode" );
@@ -631,6 +639,7 @@ MoshParams DatamoshPlugin< HostBase >::ReadParams() const
 	params.motionQuantise = ParamValue( "Quantise" );
 
 	params.spread     = ParamValue( "Spread" );
+	params.view       = static_cast< DebugView >( OptionValue( "View" ) );
 
 	params.maskAmount = ParamValue( "Mask Amount" );
 	params.maskInvert = ParamValue( "Mask Invert" ) > 0.5f;
@@ -742,7 +751,7 @@ FFResult DatamoshPlugin< HostBase >::ProcessOpenGL( ProcessOpenGLStruct* pGL )
 	// time already settled: the gate would skip the advance, leaving nothing in
 	// the accumulation buffer to composite.
 	if( advanced && pipeline.HasHistory() )
-		pipeline.Composite( pGL->HostFBO, params.mix );
+		pipeline.Composite( pGL->HostFBO, params.mix, params.view );
 	else
 		// Never fail to a black frame: an effect that cannot run should cost the
 		// operator the effect, not the output.

@@ -59,6 +59,34 @@ Notable changes to ffgl-datamosh. Format follows
 
 ### Added
 
+- **`View` — Result, Motion or Gate.** The plugin can now draw what it is
+  thinking rather than only what it is doing, which turns most of "when a knob
+  does nothing" from a checklist into one glance.
+
+  **Motion** draws the estimated field: hue is direction, and brightness is
+  speed *on the same ruler as Motion Threshold* — so a region's brightness is
+  the threshold setting that would shut it, and white means faster than that
+  slider can reach. Normalised against the threshold's own range rather than the
+  pyramid's reach, which moves with Quality and would make the same footage read
+  differently at every setting.
+
+  **Gate** draws the decision, and after the mask and the creep that decision
+  has four answers, so it has four colours: black for no motion, red for motion
+  the threshold rejected (brighter the closer it came), green for open, cyan
+  where the creep is doing the work, and a wash toward grey — never toward black
+  — where the mask is closing it. Brightness is how long a held pixel is held,
+  in **seconds**, never the per-frame survival fraction, which is 0.94 at 60 fps
+  against 0.883 at 30 for the same slider and is saturated for almost all of
+  Mosh Amount's travel. `DeltaTime` is not a uniform of the composite pass at
+  all, and its absence is the guarantee rather than a comment.
+
+  Both views replay what `PassMosh` was handed rather than re-reading the live
+  parameters, because the composite pass is not guaranteed to run in the same
+  call as `Advance` — the frame gate skips `Advance` when host time has not
+  moved and composites anyway. So they cannot draw a field the warp did not
+  apply. An unrecognised `View` value falls back to Result, so a composition
+  saved by a later build opens showing the picture.
+
 - **`Spread` — damage that creeps into blocks which never moved.** Everything
   else this plugin does is affine: a per-pixel decision computed from this
   frame's numbers alone, so a block with no motion of its own could never mosh.
@@ -132,6 +160,13 @@ Notable changes to ffgl-datamosh. Format follows
   gate. `DecayIsIndependentOfFrameRate` could not have caught this: it runs at
   Motion Threshold 0 on 3 px/frame motion, where the gate is exactly 1 and the
   normalisation is the identity.
+- `DebugViewsDrawSomethingAndResultIsUntouched`,
+  `GateViewShowsWhyEachRegionIsNotMoshing` and
+  `GateViewDrawsThisFramesMaskNotLastFrames`. The last of those is the only one
+  that catches the composite pass binding `luma.Back()` — the name the mosh pass
+  uses — instead of `luma.Front()`, since `luma.Swap()` runs between them. Every
+  other view test passes with the wrong side bound, so it flips the mask's split
+  for a single frame and compares each half against itself across the flip.
 - `DamageSpreadsIntoBlocksThatNeverMoved`, `DamageCreepIsIndependentOfFrameRate`
   and `ResetClearsTheDamageField`. All three passed on their first draft **and
   all three still passed with the thing they covered reintroduced** — the

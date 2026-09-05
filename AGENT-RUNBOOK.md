@@ -227,6 +227,34 @@ This is binary and it separates "pixels are being held" from "motion is being
 estimated and applied". It is the single most informative observation in the
 whole pass. Report both numbers, not just the verdict.
 
+### 5c². The Motion view is the estimator, drawn
+
+`PUT View = 1` (Motion). Capture one frame.
+
+**PASS** — the frame is coloured wherever the clip is moving: hue is direction,
+brightness is speed. **FAIL** — it is black while 5c said the estimator is
+running, which means the diagnostic itself is dead and every later observation
+made with it is worthless.
+
+Then `PUT View = 2` (Gate) and capture again. Read it as a legend:
+
+| what you see | what it means |
+| --- | --- |
+| black | no motion here — nothing for the gate to decide |
+| red | motion, rejected by **Motion Threshold**. Brighter = closer to clearing it |
+| green | the gate is open |
+| cyan | the gate is shut but **Spread**'s creep has reached here |
+| washed toward grey | the **mask** is closing it |
+| dim overall | the gate is open but little is being held — check **Mosh Amount** and **Decay** |
+
+Both views replay what the *last rendered frame* actually used rather than
+recomputing from the current parameters, so they cannot disagree with the effect.
+That is also what makes them worth trusting in the checks below: if 5d or 5e
+looks wrong, switch to Gate before assuming the parameter is broken.
+
+`PUT View = 0` before continuing. Every check after this one is about the
+picture, and leaving a diagnostic on would fail all of them.
+
 ### 5d. Are the ranges real? (**GATE C**)
 
 Two parameters on two different FFGL type paths. Behaviour only — a value read

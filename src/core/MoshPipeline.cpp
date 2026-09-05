@@ -545,6 +545,11 @@ void MoshPipeline::PassMosh( const MoshParams& params )
 	lastMosh.corruption      = params.corruption;
 	lastMosh.corruptEpoch    = static_cast< float >( params.corruptEpoch );
 	lastMosh.thresholdPixels = thresholdPixels;
+	// The gate's full-scale reach, which moves with Quality. A view normalised
+	// against a different number than the gate used draws the wrong brightness
+	// at Low, where the pyramid reaches 8px and the threshold clamps to 6.
+	lastMosh.thresholdFullScale = std::min( THRESHOLD_PIXEL_RANGE, maxPixels * 0.75f );
+	lastMosh.motionLag       = params.motionLag;
 	lastMosh.decay           = params.decay;
 	lastMosh.maskAmount      = params.maskAmount;
 	lastMosh.maskInvert      = params.maskInvert;
@@ -618,7 +623,7 @@ bool MoshPipeline::Advance( const FrameInputs& inputs, const MoshParams& params 
 	return true;
 }
 
-void MoshPipeline::Composite( GLuint hostFBO, float mix )
+void MoshPipeline::Composite( GLuint hostFBO, float mix, DebugView view )
 {
 	if( !initialised || !accum.IsValid() )
 		return;
@@ -635,7 +640,39 @@ void MoshPipeline::Composite( GLuint hostFBO, float mix )
 	PassTextures textures;
 	textures.Add( compositeShader, "Accum", accum.Front().GetTexture() );
 	textures.Add( compositeShader, "CurColor", colourTarget.GetTexture() );
+	// The same field the warp was fed, from the same slot of the ring.
+	textures.Add( compositeShader, "Flow", flowHistory.Delayed( lastMosh.motionLag ).GetTexture() );
+	textures.Add( compositeShader, "State", state.Front().GetTexture() );
+	// Front(), not Back(). PassMosh reads luma.Back() and luma.Swap() runs
+	// immediately after it, so by the time this pass runs the frame the mask was
+	// taken from has become the front. Binding Back() here — the name the mosh
+	// pass uses — would draw the mask from the wrong frame: same texture, same
+	// size, same format, entirely plausible content.
+	textures.Add( compositeShader, "MaskLuma", luma.Front().GetTexture() );
+	// PassDamage swapped after writing and nothing else advances it, so Front()
+	// is still the field PassMosh read.
+	textures.Add( compositeShader, "Damage", damage.Front().GetTexture() );
+
 	compositeShader.Set( "Mix", mix );
+	compositeShader.Set( "View", static_cast< int >( view ) );
+
+	// Replayed from what PassMosh was handed, never re-read from this call's
+	// parameters. Composite is not guaranteed to run in the same call as
+	// Advance: the plugin's frame gate skips Advance when host time has not
+	// moved and composites anyway, so the live values here can describe a frame
+	// no mosh pass ever rendered.
+	compositeShader.Set( "FrameRes", static_cast< float >( frameWidth ), static_cast< float >( frameHeight ) );
+	compositeShader.Set( "FlowRes", static_cast< float >( flowWidth ), static_cast< float >( flowHeight ) );
+	compositeShader.Set( "Softness", lastMosh.softness );
+	compositeShader.Set( "Corruption", lastMosh.corruption );
+	compositeShader.Set( "CorruptEpoch", lastMosh.corruptEpoch );
+	compositeShader.Set( "ThresholdPixels", lastMosh.thresholdPixels );
+	compositeShader.Set( "ThresholdFullScale", lastMosh.thresholdFullScale );
+	compositeShader.Set( "Decay", lastMosh.decay );
+	compositeShader.Set( "MaskAmount", lastMosh.maskAmount );
+	compositeShader.Set( "MaskInvert", lastMosh.maskInvert ? 1 : 0 );
+	compositeShader.Set( "HasSpread", lastMosh.spread > 0.0f ? 1 : 0 );
+	compositeShader.Set( "HasHistory", lastMosh.hasHistory ? 1 : 0 );
 	compositeShader.Set( "MaxUV", 1.0f, 1.0f );
 
 	quad.Draw();

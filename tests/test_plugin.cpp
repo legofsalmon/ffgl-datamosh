@@ -101,6 +101,25 @@ public:
 		                                              shiftX, shiftY ) );
 	}
 
+	/// One half of the frame bright, the other dark, both moving identically.
+	/// For the mask, whose whole job is to tell those two halves apart.
+	void FillSplit( int index, float shiftX, bool brightLeft )
+	{
+		textures[ index ].Upload( MakeSplitPattern( textures[ index ].GetWidth(),
+		                                            textures[ index ].GetHeight(),
+		                                            shiftX, 0.0f, 0.68f, 0.02f, 0.30f,
+		                                            brightLeft ) );
+	}
+
+	/// Only a band down the left moves; the rest is provably static. For the
+	/// views, where "this region has no motion of its own" has to be visible.
+	void FillBand( int index, float shiftX, float bandFraction )
+	{
+		textures[ index ].Upload( MakeMovingBandPattern( textures[ index ].GetWidth(),
+		                                                 textures[ index ].GetHeight(),
+		                                                 shiftX, 0.0f, bandFraction, 0.0f ) );
+	}
+
 	ProcessOpenGLStruct Frame()
 	{
 		ProcessOpenGLStruct pGL{};
@@ -126,6 +145,11 @@ public:
 			texture.Release();
 		output.Release();
 	}
+
+	/// What the plugin actually composited. The accumulation buffer is what most
+	/// tests look at, but the debug views never touch it — they are drawn in the
+	/// composite pass alone, so this is the only place they exist.
+	const RenderTarget& Output() const { return output; }
 
 private:
 	InputTexture       textures[ 2 ];
@@ -820,6 +844,298 @@ bool SurvivesHostDefaultInitialisation( PluginType& plugin, unsigned int& failed
 		}
 	}
 	return true;
+}
+
+/// Mean absolute difference over a vertical slice of the frame, across all
+/// three colour channels.
+///
+/// All three, because the Gate view distinguishes its states by hue: the creep
+/// draws cyan against the shut state's near-black, which moves green and blue
+/// and leaves red almost exactly where it was. A red-channel measurement of
+/// that reads 0.002 and looks like nothing happened.
+float SliceDifference( const std::vector< float >& a, const std::vector< float >& b,
+                       int width, int height, int margin, float from, float to )
+{
+	double    total = 0.0;
+	int       count = 0;
+	const int x0    = static_cast< int >( width * from );
+	const int x1    = static_cast< int >( width * to );
+	for( int y = margin; y < height - margin; ++y )
+	{
+		for( int x = x0; x < x1; ++x )
+		{
+			const size_t i = ( static_cast< size_t >( y ) * width + x ) * 4;
+			for( int channel = 0; channel < 3; ++channel )
+				total += std::fabs( a[ i + channel ] - b[ i + channel ] );
+			count += 3;
+		}
+	}
+	return count == 0 ? -1.0f : static_cast< float >( total / count );
+}
+
+TEST( DebugViewsDrawSomethingAndResultIsUntouched )
+{
+	// Three things at once, because they fail together and in the same way.
+	//
+	// The views live only in the composite pass — they never touch the
+	// accumulation buffer — so the host's framebuffer is the only place they
+	// exist, and this is the only test that reads it.
+	//
+	// Every assertion is that a view drew SOMETHING. A view that renders black
+	// is exactly as useless as no view, and rather worse: an operator switches
+	// to Motion to find out why nothing is moshing, sees black, and concludes
+	// the footage is not moving when in fact the diagnostic is dead.
+	Host host;
+	CHECK( host.Setup( FRAME_WIDTH, FRAME_HEIGHT, 1 ) );
+
+	auto render = [ &host ]( int view ) {
+		TestableEffect plugin;
+		const FFGLViewportStruct viewport = host.Viewport();
+		if( plugin.InitGL( &viewport ) != FF_SUCCESS )
+			return std::vector< float >();
+
+		plugin.SetFloatParameter( plugin.ParamIndex( "Mosh Amount" ), 0.8f );
+		plugin.SetFloatParameter( plugin.ParamIndex( "Motion Threshold" ), 0.0f );
+		plugin.SetFloatParameter( plugin.ParamIndex( "View" ), static_cast< float >( view ) );
+
+		float shift = 0.0f;
+		for( int frame = 1; frame <= 16; ++frame, shift += 3.0f )
+		{
+			host.Fill( 0, shift, 0.0f );
+			plugin.SetTime( frame / 60.0 );
+			ProcessOpenGLStruct pGL = host.Frame();
+			plugin.ProcessOpenGL( &pGL );
+		}
+		std::vector< float > out = ReadTarget( host.Output() );
+		plugin.DeInitGL();
+		return out;
+	};
+
+	const std::vector< float > result = render( 0 );
+	const std::vector< float > motion = render( 1 );
+	const std::vector< float > gate   = render( 2 );
+	CHECK( !result.empty() && !motion.empty() && !gate.empty() );
+
+	// Not black. A mean over a lit diagnostic is nowhere near zero.
+	CHECK( MeanComponent( motion, 1 ) > 0.02f );
+	CHECK( MeanComponent( gate, 1 ) > 0.02f );
+
+	// Three different pictures, not one picture and two tints of it.
+	CHECK( MeanInteriorDifference( result, motion, FRAME_WIDTH, FRAME_HEIGHT, 8 ) > 0.05f );
+	CHECK( MeanInteriorDifference( result, gate, FRAME_WIDTH, FRAME_HEIGHT, 8 ) > 0.05f );
+	CHECK( MeanInteriorDifference( motion, gate, FRAME_WIDTH, FRAME_HEIGHT, 8 ) > 0.05f );
+
+	// A View value this build does not know must come back as the effect, not
+	// as a diagnostic — a composition saved by a later build has to open, and it
+	// must open showing the picture rather than a debug overlay on the wall.
+	//
+	// Composited twice from the SAME instance rather than compared against the
+	// Result run above. Two runs of the same input are not bit-identical here —
+	// they drift by 0.005 to 0.011 — so a cross-run comparison would be
+	// measuring that drift against whatever threshold it was given.
+	// SetFloatParameter clamps to the option's own range and can never deliver
+	// an out-of-range value, which is why this drives the pipeline directly:
+	// only a stale saved index can.
+	{
+		TestableEffect plugin;
+		const FFGLViewportStruct viewport = host.Viewport();
+		CHECK( plugin.InitGL( &viewport ) == FF_SUCCESS );
+		plugin.SetFloatParameter( plugin.ParamIndex( "Mosh Amount" ), 0.8f );
+
+		float shift = 0.0f;
+		for( int frame = 1; frame <= 16; ++frame, shift += 3.0f )
+		{
+			host.Fill( 0, shift, 0.0f );
+			plugin.SetTime( frame / 60.0 );
+			ProcessOpenGLStruct pGL = host.Frame();
+			plugin.ProcessOpenGL( &pGL );
+		}
+
+		plugin.pipeline.Composite( host.Output().GetFBO(), 1.0f, DebugView::Result );
+		const std::vector< float > asResult = ReadTarget( host.Output() );
+		plugin.pipeline.Composite( host.Output().GetFBO(), 1.0f, static_cast< DebugView >( 7 ) );
+		const std::vector< float > asUnknown = ReadTarget( host.Output() );
+
+		CHECK( MeanInteriorDifference( asResult, asUnknown, FRAME_WIDTH, FRAME_HEIGHT, 8 ) < 1e-6f );
+		// And the same two calls with a view this build DOES know differ, so the
+		// comparison above is not simply insensitive.
+		plugin.pipeline.Composite( host.Output().GetFBO(), 1.0f, DebugView::Gate );
+		const std::vector< float > asGate = ReadTarget( host.Output() );
+		CHECK( MeanInteriorDifference( asResult, asGate, FRAME_WIDTH, FRAME_HEIGHT, 8 ) > 0.05f );
+
+		plugin.DeInitGL();
+	}
+}
+
+TEST( GateViewShowsWhyEachRegionIsNotMoshing )
+{
+	// The view exists to answer "why is nothing happening here", and after the
+	// mask and the spread that question has more than one answer. A region shut
+	// by Motion Threshold and a region shut by the mask are different problems
+	// with different fixes, so they must not look alike.
+	Host host;
+	CHECK( host.Setup( FRAME_WIDTH, FRAME_HEIGHT, 1 ) );
+
+	auto gateView = [ &host ]( float threshold, float maskAmount ) {
+		TestableEffect plugin;
+		const FFGLViewportStruct viewport = host.Viewport();
+		if( plugin.InitGL( &viewport ) != FF_SUCCESS )
+			return std::vector< float >();
+
+		plugin.SetFloatParameter( plugin.ParamIndex( "Mosh Amount" ), 0.8f );
+		plugin.SetFloatParameter( plugin.ParamIndex( "Motion Threshold" ), threshold );
+		plugin.SetFloatParameter( plugin.ParamIndex( "Mask Amount" ), maskAmount );
+		plugin.SetFloatParameter( plugin.ParamIndex( "View" ), 2.0f );
+
+		float shift = 0.0f;
+		for( int frame = 1; frame <= 16; ++frame, shift += 3.0f )
+		{
+			host.Fill( 0, shift, 0.0f );
+			plugin.SetTime( frame / 60.0 );
+			ProcessOpenGLStruct pGL = host.Frame();
+			plugin.ProcessOpenGL( &pGL );
+		}
+		std::vector< float > out = ReadTarget( host.Output() );
+		plugin.DeInitGL();
+		return out;
+	};
+
+	const std::vector< float > open   = gateView( 0.0f, 0.0f );
+	const std::vector< float > shut   = gateView( 1.0f, 0.0f );
+	const std::vector< float > masked = gateView( 0.0f, 1.0f );
+	CHECK( !open.empty() && !shut.empty() && !masked.empty() );
+
+	// Open reads green: more green than red.
+	CHECK( MeanComponent( open, 1 ) > MeanComponent( open, 0 ) );
+	// Shut by the threshold reads red: more red than green.
+	CHECK( MeanComponent( shut, 0 ) > MeanComponent( shut, 1 ) );
+
+	// The creep has to be legible too, or the Gate view is a confident lie
+	// wherever the spread is doing the work: it would draw "shut" over a region
+	// that is very much moshing. Measured in the still part of the frame, which
+	// the motion gate can never open.
+	auto gateWithSpread = [ &host ]( float spread ) {
+		TestableEffect plugin;
+		const FFGLViewportStruct viewport = host.Viewport();
+		if( plugin.InitGL( &viewport ) != FF_SUCCESS )
+			return std::vector< float >();
+
+		plugin.SetFloatParameter( plugin.ParamIndex( "Mosh Amount" ), 0.8f );
+		plugin.SetFloatParameter( plugin.ParamIndex( "Motion Threshold" ), 0.0f );
+		plugin.SetFloatParameter( plugin.ParamIndex( "Spread" ), spread );
+		plugin.SetFloatParameter( plugin.ParamIndex( "View" ), 2.0f );
+
+		float shift = 0.0f;
+		for( int frame = 1; frame <= 24; ++frame, shift += 3.0f )
+		{
+			host.FillBand( 0, shift, 0.33f );
+			plugin.SetTime( frame / 60.0 );
+			ProcessOpenGLStruct pGL = host.Frame();
+			plugin.ProcessOpenGL( &pGL );
+		}
+		std::vector< float > out = ReadTarget( host.Output() );
+		plugin.DeInitGL();
+		return out;
+	};
+
+	const std::vector< float > noCreep   = gateWithSpread( 0.0f );
+	const std::vector< float > withCreep = gateWithSpread( 1.0f );
+	CHECK( !noCreep.empty() && !withCreep.empty() );
+
+	// In the still half, turning the creep on has to change the picture.
+	// Measured just beyond the seeding band, not across the whole still half.
+	// The creep's visible reach is roughly its speed times the fixed half-life —
+	// about two blocks past the seed at this frame size — so a whole-half mean
+	// averages the lit part against a much larger dark part and reports 0.02
+	// where the lit blocks moved by ten times that.
+	const float stillRegion = SliceDifference( noCreep, withCreep,
+	                                           FRAME_WIDTH, FRAME_HEIGHT, 8, 0.40f, 0.70f );
+	CHECK( stillRegion > 0.02f );
+
+	// Masked out is neither. It must not look like the threshold shutting it,
+	// and it must not look like the gate being open either.
+	CHECK( MeanInteriorDifference( masked, open, FRAME_WIDTH, FRAME_HEIGHT, 8 ) > 0.02f );
+	CHECK( MeanInteriorDifference( masked, shut, FRAME_WIDTH, FRAME_HEIGHT, 8 ) > 0.02f );
+	// And specifically not black — black is reserved for "no motion here", and
+	// a mask that darkened toward it would be unreadable against a still frame.
+	CHECK( MeanComponent( masked, 1 ) > 0.01f );
+}
+
+TEST( GateViewDrawsThisFramesMaskNotLastFrames )
+{
+	// The composite pass binds luma.Front() where the mosh pass binds
+	// luma.Back(), because luma.Swap() runs between them. Using the mosh pass's
+	// name for it here draws the mask from the previous frame: same texture,
+	// same size, same format, entirely plausible content.
+	//
+	// Nothing catches that on footage where the mask does not move — every other
+	// view test here included, all of which pass with the wrong side bound. So
+	// this establishes with the bright half on the left, then flips the split
+	// for a single frame and asks which half the view says is masked.
+	Host host;
+	CHECK( host.Setup( FRAME_WIDTH, FRAME_HEIGHT, 1 ) );
+
+	TestableEffect plugin;
+	const FFGLViewportStruct viewport = host.Viewport();
+	CHECK( plugin.InitGL( &viewport ) == FF_SUCCESS );
+
+	plugin.SetFloatParameter( plugin.ParamIndex( "Mosh Amount" ), 0.8f );
+	plugin.SetFloatParameter( plugin.ParamIndex( "Motion Threshold" ), 0.0f );
+	plugin.SetFloatParameter( plugin.ParamIndex( "Mask Amount" ), 1.0f );
+	plugin.SetFloatParameter( plugin.ParamIndex( "View" ), 2.0f );
+
+	float shift = 0.0f;
+	int   frame = 1;
+	for( ; frame <= 12; ++frame, shift += 3.0f )
+	{
+		host.FillSplit( 0, shift, true );
+		plugin.SetTime( frame / 60.0 );
+		ProcessOpenGLStruct pGL = host.Frame();
+		plugin.ProcessOpenGL( &pGL );
+	}
+
+	// The masked half is desaturated toward grey, so the open half carries far
+	// more green. Averaging that per half says which side the view thinks is
+	// allowed to hold.
+	auto greenPerHalf = [ &host ]( bool leftHalf ) {
+		const std::vector< float > view = ReadTarget( host.Output() );
+		double                     total = 0.0;
+		int                        count = 0;
+		const int x0 = leftHalf ? 8 : FRAME_WIDTH / 2 + 8;
+		const int x1 = leftHalf ? FRAME_WIDTH / 2 - 8 : FRAME_WIDTH - 8;
+		for( int y = 8; y < FRAME_HEIGHT - 8; ++y )
+			for( int x = x0; x < x1; ++x )
+				{ total += view[ ( static_cast< size_t >( y ) * FRAME_WIDTH + x ) * 4 + 1 ]; ++count; }
+		return count == 0 ? -1.0f : static_cast< float >( total / count );
+	};
+
+	// Bright on the left, so the left is the half still allowed to hold.
+	const float leftBefore  = greenPerHalf( true );
+	const float rightBefore = greenPerHalf( false );
+	CHECK( leftBefore > rightBefore );
+
+	// One frame with the split flipped. A view reading this frame's luma follows
+	// it; a view reading last frame's does not.
+	host.FillSplit( 0, shift, false );
+	plugin.SetTime( frame / 60.0 );
+	ProcessOpenGLStruct pGL = host.Frame();
+	plugin.ProcessOpenGL( &pGL );
+
+	// Each half against ITSELF across the flip, not against the other half. The
+	// dark half of this pattern is dark enough that the block matcher struggles
+	// with it, so it reads as gate-shut rather than mask-shut and a
+	// half-against-half comparison would be measuring the estimator. Comparing a
+	// half before and after cancels that entirely: the only thing that changed
+	// is which side the mask protects.
+	//
+	// Measured 0.451 -> 0.218 on the left and 0.049 -> 0.111 on the right.
+	// Binding last frame's luma leaves both where they were.
+	const float leftAfter  = greenPerHalf( true );
+	const float rightAfter = greenPerHalf( false );
+	CHECK( leftAfter < 0.7f * leftBefore );
+	CHECK( rightAfter > 1.5f * rightBefore );
+
+	plugin.DeInitGL();
 }
 
 TEST( BothPluginsSurviveHostInstantiation )

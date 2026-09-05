@@ -521,6 +521,26 @@
 						</td>
 					</tr>
 					<tr>
+						<td>View</td>
+						<td>Result / Motion / Gate</td>
+						<td>Result</td>
+						<td class="desc">
+							Draws what the effect is thinking instead of what it is doing.
+							<strong>Motion</strong> shows the estimated vector field: hue is
+							direction, brightness is speed on the same ruler as
+							<strong>Motion Threshold</strong> &mdash; so a region's brightness
+							<em>is</em> the threshold setting that would shut it, and white
+							means faster than that slider can reach. <strong>Gate</strong>
+							shows the decision itself: black where there is no motion to
+							gate, red where motion was rejected by the threshold (brighter
+							the closer it came), green where the gate is open, cyan where the
+							creep has reached, and washed toward grey where the mask is
+							closing it. Overall brightness is how long a held pixel is held,
+							in seconds. Both replay exactly what the last rendered frame
+							used, so they cannot show a field the effect did not apply.
+						</td>
+					</tr>
+					<tr>
 						<td>Quality</td>
 						<td>Low / Medium / High / Ultra</td>
 						<td>High</td>
@@ -678,6 +698,17 @@
 				Until 0.2.0 every Style preset pushed Mosh Amount to 1.0, so picking a
 				look was the gesture that disarmed everything you would play. Presets no
 				longer touch it.
+			</div>
+
+			<div class="note good">
+				<span class="note-label">Use the views before guessing</span>
+				Most of the table below is answerable in one glance. Switch
+				<strong>View</strong> to <em>Motion</em>: if it is black, the estimator is
+				finding no movement and nothing else you change will matter. If it is lit,
+				switch to <em>Gate</em>: red means <strong>Motion Threshold</strong> is
+				rejecting it, grey means the <strong>mask</strong> is, and dim green means
+				the gate is open but nothing is holding it &mdash; look at
+				<strong>Mosh Amount</strong> and <strong>Decay</strong>.
 			</div>
 
 			<h3>When a knob does nothing</h3>
