@@ -1,5 +1,3 @@
-#version 410 core
-
 // The effect itself: motion-compensate the accumulation buffer and decide,
 // per pixel, whether it is allowed to refresh from the live frame.
 //
@@ -9,8 +7,13 @@
 // path produces all three classic looks:
 //
 //   melt   — refresh disabled while motion keeps flowing (Amount up)
-//   bloom  — vector field frozen, so motion piles up (Freeze up)
+//   bloom  — vector field frozen, so motion piles up (Smoothing up)
 //   drag   — only strongly moving blocks smear (Threshold up)
+//
+// No #version line: MoshCommon.glsl is prepended to this source at compile time
+// and carries it. The field sampling, the gate and the two time curves live
+// there because Composite.glsl has to be able to redraw exactly this decision,
+// and a second copy of them would drift.
 
 uniform sampler2D CurColor;   // this frame, straight alpha, exact size
 uniform sampler2D AccumPrev;  // what we displayed last frame
@@ -32,25 +35,8 @@ uniform float CorruptEpoch;
 uniform float DeltaTime;
 uniform bool  HasHistory;
 
-// Mosh Amount maps to a hold time between these, log-spaced, so that equal
-// slider travel is an equal ratio of hold — the taper every delay and reverb
-// control uses, and the one a fader hand already knows.
-const float HOLD_MIN_SECONDS = 0.05;
-const float HOLD_MAX_SECONDS = 4.0;
-// Linear fade-in over this much of the bottom of the travel, so the fader is
-// gentle where a hand parks it and slams back to. A steep onset here would
-// just move the cliff to the end of the fader an operator rests at.
-const float HOLD_FADE_IN = 0.12;
-
 in vec2 uv;
 out vec4 fragColor;
-
-float Hash( vec2 p, float seed )
-{
-	vec3 p3 = fract( vec3( p.x, p.y, p.x ) * 0.1031 + seed * 0.0973 );
-	p3 += dot( p3, p3.yzx + 33.33 );
-	return fract( ( p3.x + p3.y ) * p3.z );
-}
 
 void main()
 {
@@ -66,28 +52,7 @@ void main()
 
 	float moshLevel = texture( State, vec2( 0.5 ) ).r;
 
-	// Sampling the field at the block centre gives every pixel in a macroblock
-	// the same vector, which is what produces hard-edged MPEG tearing. Sampling
-	// it normally lets the hardware interpolate, which liquefies it. Softness
-	// crossfades between the two, so one estimator covers both looks.
-	vec2 blockUV    = ( floor( uv * FlowRes ) + 0.5 ) / FlowRes;
-	vec2 flowBlocky = texture( Flow, blockUV ).xy;
-	vec2 flowSmooth = texture( Flow, uv ).xy;
-	vec2 flow       = mix( flowBlocky, flowSmooth, clamp( Softness, 0.0, 1.0 ) );
-
-	// Corrupt macroblocks: a fraction of blocks get a plausible but wrong
-	// vector, mimicking a block whose data arrived damaged.
-	if( Corruption > 0.0 )
-	{
-		vec2  blockId = floor( uv * FlowRes );
-		float roll    = Hash( blockId, CorruptEpoch );
-		if( roll < Corruption )
-		{
-			float angle = Hash( blockId, CorruptEpoch + 17.0 ) * 6.2831853;
-			float scale = Hash( blockId, CorruptEpoch + 41.0 ) * 2.0;
-			flow = mat2( cos( angle ), -sin( angle ), sin( angle ), cos( angle ) ) * flow * scale;
-		}
-	}
+	vec2 flow = MoshFlowAt( Flow, uv, FlowRes, Softness, Corruption, CorruptEpoch );
 
 	// The gate is measured on the estimated motion, before gain, so turning
 	// Gain up smears harder without also changing what counts as moving.
@@ -108,11 +73,11 @@ void main()
 	if( BlockRepeat > 0.0 )
 	{
 		vec2  blockId = floor( uv * FlowRes );
-		float roll    = Hash( blockId, CorruptEpoch + 91.0 );
+		float roll    = MoshHash( blockId, CorruptEpoch + 91.0 );
 		if( roll < BlockRepeat )
 		{
-			vec2 direction = vec2( Hash( blockId, CorruptEpoch + 7.0 ),
-			                       Hash( blockId, CorruptEpoch + 13.0 ) ) * 2.0 - 1.0;
+			vec2 direction = vec2( MoshHash( blockId, CorruptEpoch + 7.0 ),
+			                       MoshHash( blockId, CorruptEpoch + 13.0 ) ) * 2.0 - 1.0;
 			sampleUV += sign( direction ) / FlowRes;
 		}
 	}
@@ -133,49 +98,12 @@ void main()
 		moshed = texture( AccumPrev, sampleUV );
 	}
 
-	// Still regions keep refreshing normally; moving ones carry old pixels
-	// forward. Threshold at 0 moshes everything, which gives the full melt.
-	float gate = smoothstep( ThresholdPixels, ThresholdPixels + 0.5, motionPixels );
-
-	// Decay expressed as a half-life rather than a per-frame fraction, so the
-	// same setting bleeds the live image back at the same rate whether the host
-	// is running at 30 or 60 or an uneven frame rate. A flat multiplier would
-	// decay twice as fast at double the frame rate, which makes the control
-	// mean something different on every machine it runs on.
-	float retention = 1.0;
-	if( Decay > 0.0 )
-	{
-		// Geometric, not linear, between the same endpoints: equal travel is
-		// an equal ratio of half-life. Linear put 0.5 at a 4s half-life —
-		// longer than any burst — so nothing happened for four fifths of the
-		// slider and then it collapsed. Now 0.5 is 0.63s.
-		float halfLife = 8.0 * pow( 0.00625, clamp( Decay, 0.0, 1.0 ) );
-		retention      = exp2( -DeltaTime / halfLife );
-	}
-
-	// Mosh Amount is a hold TIME on a log scale, not a per-frame retention
-	// fraction. A raw fraction decays geometrically, so a linear slider spent
-	// most of its travel inside the first few frames of hold and crushed the
-	// entire usable range into its top tenth — and, being per-frame, it meant
-	// something different at every frame rate, three lines below a comment
-	// condemning exactly that. Endpoints are preserved: 0 is still an exact
-	// passthrough and 1 is still an exact never-refresh.
-	//
-	// The gate stays OUTSIDE the map, as a linear multiplier. Folded into the
-	// exponent it would lift a barely-moving pixel to a near-full hold and
+	// The gate stays OUTSIDE the hold map, as a linear multiplier. Folded into
+	// the exponent it would lift a barely-moving pixel to a near-full hold and
 	// erase Motion Threshold.
-	float keep;
-	if( moshLevel >= 0.995 )
-	{
-		keep = 1.0;
-	}
-	else
-	{
-		float hold = HOLD_MIN_SECONDS * pow( HOLD_MAX_SECONDS / HOLD_MIN_SECONDS, moshLevel );
-		keep       = exp2( -DeltaTime / hold );
-		keep      *= clamp( moshLevel / HOLD_FADE_IN, 0.0, 1.0 );
-	}
-
+	float gate        = MoshGate( motionPixels, ThresholdPixels );
+	float retention   = MoshRetention( Decay, DeltaTime );
+	float keep        = MoshHold( moshLevel, DeltaTime );
 	float persistence = clamp( keep * gate * retention, 0.0, 1.0 );
 
 	vec4 result = mix( live, moshed, persistence );

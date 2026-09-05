@@ -22,6 +22,7 @@ datamosh_embed_shaders( datamosh_core
     shaders/Control.glsl
     shaders/BlockMatch.glsl
     shaders/FlowPost.glsl
+    shaders/MoshCommon.glsl
     shaders/Mosh.glsl
     shaders/Composite.glsl
     shaders/Passthrough.glsl

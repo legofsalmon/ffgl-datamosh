@@ -43,6 +43,24 @@ Notable changes to ffgl-datamosh. Format follows
 - `ResetReseedsAFrozenVectorField`, and `MeanInteriorDifference` moves into the
   shared harness so both test files ask the question the same way.
 
+### Changed
+
+- **The mosh pass and the composite pass now share one shader source.** The
+  field sampling, the motion gate and the two time curves move into a new
+  `MoshCommon.glsl`, which is prepended to both `Mosh.glsl` and
+  `Composite.glsl` at compile time and carries the `#version` line for them.
+
+  Groundwork, with no behaviour change: the composite pass is about to grow
+  views that redraw the warp's decision, and a second copy of a dozen lines of
+  gate arithmetic would agree the day it was written and drift afterwards. A
+  view that draws a different field than the warp used is worse than no view.
+
+  Verified as a refactor rather than assumed to be one — the accumulation
+  buffer was checksummed over 24 frames across six parameter sets spanning
+  every damage control, before and after, and every digest is identical. The
+  suite passing is not evidence here: a shader that fails to compile falls
+  through to `Passthrough`, which looks exactly like a working bypass.
+
 ## [0.2.0] — 2026-09-02
 
 **Saved compositions change appearance.** Several sliders now mean something
