@@ -380,6 +380,45 @@ TEST( SlidersStillReachThePipelineWhileStyleShowsCustom )
 	CHECK_NEAR( plugin.ReadParams().moshAmount, 0.7, 1e-4 );
 }
 
+TEST( NoStyleCanWipeTheMask )
+{
+	// The mask is a per-composition spatial setup, not part of a look, so it is
+	// deliberately absent from MANAGED[]. Two behaviours fall out of that and
+	// both matter live.
+	//
+	// First: ApplyStyle writes a shared baseline across every managed
+	// parameter, so a managed mask would be reset to 0 by picking ANY style —
+	// the operator frames a mask, reaches for a look, and the mask silently
+	// vanishes. That is exactly the failure 0.2.0 removed for the performance
+	// controls, and this stops it being reintroduced spatially.
+	//
+	// Second: riding Mask Amount must not flip the dropdown to Custom, because
+	// the mask is not part of what makes a look that look.
+	TestableEffect plugin;
+	const unsigned int styleIdx = plugin.ParamIndex( "Style" );
+	const unsigned int maskIdx  = plugin.ParamIndex( "Mask Amount" );
+	const unsigned int invIdx   = plugin.ParamIndex( "Mask Invert" );
+	CHECK( maskIdx != TestableEffect::NO_PARAM );
+	CHECK( invIdx != TestableEffect::NO_PARAM );
+
+	plugin.SetFloatParameter( maskIdx, 0.8f );
+	plugin.SetFloatParameter( invIdx, 1.0f );
+
+	// Every style, not just one: a baseline written by any of them would do it.
+	for( int style = 0; style <= static_cast< int >( Style::Default ); ++style )
+	{
+		plugin.SetFloatParameter( styleIdx, static_cast< float >( style ) );
+		CHECK_NEAR( plugin.ReadParams().maskAmount, 0.8, 1e-4 );
+		CHECK( plugin.ReadParams().maskInvert );
+	}
+
+	// And the dropdown still names the last style picked, rather than falling
+	// back to Custom because the mask moved.
+	plugin.SetFloatParameter( styleIdx, static_cast< float >( Style::Melt ) );
+	plugin.SetFloatParameter( maskIdx, 0.25f );
+	CHECK_NEAR( plugin.GetFloatParameter( styleIdx ), static_cast< float >( Style::Melt ), 1e-4 );
+}
+
 TEST( AbandoningAStyleKeepsItsValues )
 {
 	// The trap behind that report. Selecting Custom does not restore defaults,
@@ -611,6 +650,8 @@ TEST( ParametersMapToTheRightFields )
 	set( "Motion Lag", 5.0f );
 	set( "Block Repeat", 0.35f );
 	set( "Quantise", 0.65f );
+	set( "Mask Amount", 0.4f );
+	set( "Mask Invert", 1.0f );
 	set( "Mix", 0.8f );
 	set( "Invert Motion", 1.0f );
 	// Options are addressed by position: 3 is the fourth entry, "32".
@@ -632,6 +673,8 @@ TEST( ParametersMapToTheRightFields )
 	CHECK( params.motionLag == 5 );
 	CHECK_NEAR( params.blockRepeat, 0.35, 1e-5 );
 	CHECK_NEAR( params.motionQuantise, 0.65, 1e-5 );
+	CHECK_NEAR( params.maskAmount, 0.4, 1e-5 );
+	CHECK( params.maskInvert );
 	CHECK_NEAR( params.mix, 0.8, 1e-5 );
 	CHECK( params.invertDirection );
 

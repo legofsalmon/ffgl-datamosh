@@ -19,6 +19,7 @@ uniform sampler2D CurColor;   // this frame, straight alpha, exact size
 uniform sampler2D AccumPrev;  // what we displayed last frame
 uniform sampler2D Flow;       // conditioned vector field, at block resolution
 uniform sampler2D State;      // 1x1 control state; .r is the mosh level
+uniform sampler2D MaskLuma;   // this frame's luma, from the MOTION input
 
 uniform vec2  FrameRes;
 uniform vec2  FlowRes;
@@ -29,6 +30,8 @@ uniform float Direction;        // +1 or -1
 uniform float ThresholdPixels;  // motion below this does not mosh
 uniform float Quantise;         // 0..1 coarseness of the displacement grid
 uniform float BlockPixels;      // macroblock edge, the coarsest sensible step
+uniform float MaskAmount;       // 0 the mask is inert, 1 fully applied
+uniform bool  MaskInvert;       // mosh the dark parts instead
 uniform float Decay;
 uniform float Corruption;
 uniform float BlockRepeat;
@@ -111,11 +114,38 @@ void main()
 	float retention = MoshRetention( Decay, DeltaTime );
 	float keep      = MoshHold( moshLevel, DeltaTime );
 
-	// One spatial term, normalised once. The gate is the only thing in it for
-	// now; anything else that varies across the frame folds in here rather
-	// than inventing its own frame-rate treatment beside it. Three
-	// normalisations with three comments is how divergence starts.
-	float spatial     = MoshGate( motionPixels, ThresholdPixels );
+	// Where the mosh is allowed to land, from the brightness of the motion
+	// input — the clip's own in the effect, the other layer's in the mixer, so
+	// the layer supplying the motion also paints the mask, and Motion Source
+	// flips both together.
+	//
+	// Sampled at uv, not at sampleUV: the mask says where the mosh lands, not
+	// what it fetches. Sampling it displaced would drag the mask along with the
+	// warp and smear its own edges into the image.
+	//
+	// smoothstep rather than raw luma because real footage sits mid-grey almost
+	// everywhere, and a raw mask on it reads as a flat attenuation rather than
+	// as a shape.
+	float shaped = smoothstep( 0.0, 1.0, clamp( texture( MaskLuma, uv ).r, 0.0, 1.0 ) );
+	if( MaskInvert )
+		shaped = 1.0 - shaped;
+	// Amount is depth, not gain: at 0 this is exactly 1 everywhere and every
+	// existing composition renders unchanged.
+	float mask = mix( 1.0, shaped, clamp( MaskAmount, 0.0, 1.0 ) );
+
+	// One spatial term, normalised once. The gate asks whether this pixel is
+	// moving and the mask asks whether it is allowed to hold; both vary across
+	// the frame, so both belong in here rather than each inventing its own
+	// frame-rate treatment beside the other. Three normalisations with three
+	// comments is how divergence starts.
+	//
+	// The mask stays OUTSIDE the hold-time map for the same reason the gate
+	// does. Folded into the exponent, a half-lit pixel would sit at a 0.45s
+	// hold against a fully lit pixel's 4s — perceptually both "held" — so the
+	// mask would collapse into a hard key and lose every midtone. Out here,
+	// mask 0.5 is literally half the cross-fade weight, and that gradient is
+	// what makes it paintable.
+	float spatial     = MoshGate( motionPixels, ThresholdPixels ) * mask;
 	float persistence = clamp( keep * retention * MoshNormaliseSpatial( spatial, DeltaTime ),
 	                           0.0, 1.0 );
 

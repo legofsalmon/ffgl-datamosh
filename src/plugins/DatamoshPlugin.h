@@ -296,6 +296,21 @@ void DatamoshPlugin< HostBase >::DeclareCommonParams()
 	                                           { { "Low", 0.0f }, { "Medium", 1.0f }, { "High", 2.0f }, { "Ultra", 3.0f } },
 	                                           2 ) );
 
+	// --- where it is allowed to land ---
+	// Appended at the end of the list, never inserted: a host writes parameters
+	// by index and a saved composition restores by index, so an insertion here
+	// would shift every later parameter and reload every existing composition
+	// wrong. That costs the panel a "Mask" region below "Output" — groups only
+	// collapse when they are consecutive — which is the cheaper of the two
+	// prices.
+	//
+	// Deliberately absent from MANAGED[] below. A style describes character; a
+	// mask is where this instance sits in a composition. Managing it would make
+	// ApplyStyle write Mask Amount 0 in its shared baseline, so picking a look
+	// would wipe the operator's mask — the exact failure 0.2.0 removed.
+	AddGrouped( "Mask", ParamRange::Create( "Mask Amount", 0.0f, Range( 0.0f, 1.0f ) ) );
+	AddGrouped( "Mask", ParamBool::Create( "Mask Invert", false ) );
+
 	// Exactly the parameters ApplyStyle writes. Nothing else can invalidate a
 	// style, so Trigger, Mix, Quality and the rest leave the dropdown alone.
 	autoModeIndex       = ParamIndex( "Auto Mode" );
@@ -601,6 +616,9 @@ MoshParams DatamoshPlugin< HostBase >::ReadParams() const
 	params.motionLag      = static_cast< int >( ParamValue( "Motion Lag" ) + 0.5f );
 	params.blockRepeat    = ParamValue( "Block Repeat" );
 	params.motionQuantise = ParamValue( "Quantise" );
+
+	params.maskAmount = ParamValue( "Mask Amount" );
+	params.maskInvert = ParamValue( "Mask Invert" ) > 0.5f;
 
 	params.audioAmount = ParamValue( "Audio Amount" );
 	params.quality     = static_cast< Quality >( OptionValue( "Quality" ) );

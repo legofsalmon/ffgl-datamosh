@@ -84,6 +84,27 @@ std::vector< uint8_t > MakeShiftedPattern( int width, int height, float shiftX, 
 	return image;
 }
 
+std::vector< uint8_t > MakeSplitPattern( int width, int height, float shiftX, float shiftY,
+                                         float brightLo, float darkLo, float amp,
+                                         bool brightLeft )
+{
+	std::vector< uint8_t > image( static_cast< size_t >( width ) * height * 4 );
+	for( int y = 0; y < height; ++y )
+	{
+		for( int x = 0; x < width; ++x )
+		{
+			const float  base = PatternAt( x - shiftX, y - shiftY );
+			const bool   left = ( x < width / 2 );
+			const float  lo   = ( left == brightLeft ) ? brightLo : darkLo;
+			const float  v    = lo + amp * base;
+			const size_t i    = ( static_cast< size_t >( y ) * width + x ) * 4;
+			image[ i + 0 ] = image[ i + 1 ] = image[ i + 2 ] = ToByte( v );
+			image[ i + 3 ] = 255;
+		}
+	}
+	return image;
+}
+
 std::vector< uint8_t > MakeSolid( int width, int height, uint8_t r, uint8_t g, uint8_t b )
 {
 	std::vector< uint8_t > image( static_cast< size_t >( width ) * height * 4 );

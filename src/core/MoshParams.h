@@ -98,6 +98,15 @@ struct MoshParams
 	/// giving stepped chunky motion rather than smooth displacement.
 	float motionQuantise = 0.0f;
 
+	// --- Mask -------------------------------------------------------------
+	/// 0..1 depth of the luma mask on the persistence gate. The mask comes from
+	/// the MOTION input's brightness — the clip's own in the effect, the other
+	/// layer's in the mixer — so the layer that supplies the motion also paints
+	/// where the mosh is allowed to stick. 0 leaves it inert.
+	float maskAmount = 0.0f;
+	/// Mosh the dark parts instead of the bright ones.
+	bool  maskInvert = false;
+
 	// --- Sync -------------------------------------------------------------
 	/// 0..1 audio level, from the host's FFT.
 	float audioLevel  = 0.0f;

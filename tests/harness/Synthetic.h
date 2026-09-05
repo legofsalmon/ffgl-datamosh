@@ -21,6 +21,23 @@ float PatternAt( float x, float y );
 /// tests are not measuring alpha handling by accident.
 std::vector< uint8_t > MakeShiftedPattern( int width, int height, float shiftX, float shiftY );
 
+/// Greyscale RGBA8 image of the reference pattern displaced by (shiftX, shiftY),
+/// with one half of the frame lifted to `brightLo..brightLo+amp` and the other
+/// to `darkLo..darkLo+amp`.
+///
+/// Both halves carry the SAME contrast and differ only in DC offset, which is
+/// the point: the estimator sees identical structure on both sides, so the only
+/// thing that differs across the split is luma and a difference in the result
+/// can only be the mask. Scaling one half's contrast instead would let the
+/// search's zero bias suppress motion on the dim side, and the test would be
+/// measuring the estimator rather than the mask.
+///
+/// Greyscale, so the mask's Rec.709 luma is exactly the value written and the
+/// expectation can be reasoned about without reimplementing the conversion.
+std::vector< uint8_t > MakeSplitPattern( int width, int height, float shiftX, float shiftY,
+                                         float brightLo, float darkLo, float amp,
+                                         bool brightLeft );
+
 /// Flat RGBA8 image, for cut-detection tests.
 std::vector< uint8_t > MakeSolid( int width, int height, uint8_t r, uint8_t g, uint8_t b );
 

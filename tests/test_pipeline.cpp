@@ -93,6 +93,29 @@ float MeanInterior( const std::vector< float >& rgba, int width, int height, int
 	return count == 0 ? 0.0f : static_cast< float >( total / count );
 }
 
+/// Mean absolute difference on one half of the frame, excluding a margin.
+///
+/// A whole-frame mean cannot see a mask: it averages the two halves back
+/// together and reports the same number whichever side moshed.
+float HalfDifference( const std::vector< float >& a, const std::vector< float >& b,
+                      int width, int height, int margin, bool leftHalf )
+{
+	const int x0 = leftHalf ? margin : width / 2 + margin;
+	const int x1 = leftHalf ? width / 2 - margin : width - margin;
+	double    total = 0.0;
+	int       count = 0;
+	for( int y = margin; y < height - margin; ++y )
+	{
+		for( int x = x0; x < x1; ++x )
+		{
+			const size_t i = ( static_cast< size_t >( y ) * width + x ) * 4;
+			total += std::fabs( a[ i ] - b[ i ] );
+			++count;
+		}
+	}
+	return count == 0 ? -1.0f : static_cast< float >( total / count );
+}
+
 /// Mean absolute difference across the vector components only.
 ///
 /// The flow buffer also carries the match residual, which is a diagnostic
@@ -1018,6 +1041,137 @@ TEST( FullMoshAmountMasksTheBurstControls )
 	// Below full it very much does, which is what makes the above a masking
 	// result rather than a trigger that never worked.
 	CHECK( levelAfter( 0.0f, true ) - levelAfter( 0.0f, false ) > 0.9f );
+}
+
+TEST( LumaMaskLocalisesTheMoshAndInvertSwapsIt )
+{
+	// The mask reads the brightness of the MOTION input and decides where the
+	// mosh is allowed to stick. Both halves carry the same contrast and differ
+	// only in DC offset, so the estimator sees identical structure on both
+	// sides and anything that differs across the split can only be the mask.
+	//
+	// Each half is compared against ITSELF across mask settings, never against
+	// the other half. The two halves sample different regions of the noise
+	// field, so they mosh by different amounts even with the mask off — 0.018
+	// against 0.004 — and a test that expected them equal would be asserting
+	// something untrue about the pattern rather than anything about the mask.
+	//
+	// Every configuration also has to show moshing happening SOMEWHERE. A mask
+	// reading zero gives persistence 0, which is a pixel-exact copy of the
+	// input and indistinguishable from a dead plugin, so "this half is clean"
+	// can never be the whole of a passing result.
+	constexpr int W = 160, H = 128;
+
+	struct Halves { float bright, dark; };
+	auto run = [ & ]( float maskAmount, bool invert ) {
+		std::vector< float > arm[ 2 ];
+		for( int i = 0; i < 2; ++i )
+		{
+			Rig rig;
+			if( !rig.Setup( W, H ) )
+				return Halves{ -1.0f, -1.0f };
+
+			MoshParams params      = RawEstimatorParams();
+			params.moshAmount      = ( i == 0 ) ? 0.0f : 0.9f;
+			params.motionThreshold = 0.0f;
+			params.maskAmount      = maskAmount;
+			params.maskInvert      = invert;
+
+			for( int frame = 0; frame < 12; ++frame )
+			{
+				// Bright on the left throughout. Amplitude 0.30 on both sides:
+				// below about that the block matcher stops finding motion at
+				// all and the test measures the estimator instead.
+				rig.texture.Upload( MakeSplitPattern( W, H, frame * 3.0f, 0.0f,
+				                                      0.68f, 0.02f, 0.30f, true ) );
+				params.frame = frame;
+				rig.pipeline.Advance( rig.Inputs(), params );
+			}
+			arm[ i ] = ReadTarget( rig.pipeline.GetAccumulation() );
+			rig.Teardown();
+		}
+		// Distance from the same run at Mosh Amount 0, which is an exact
+		// passthrough — so this is "how much did the effect do", per half.
+		return Halves{ HalfDifference( arm[ 0 ], arm[ 1 ], W, H, 12, true ),
+		               HalfDifference( arm[ 0 ], arm[ 1 ], W, H, 12, false ) };
+	};
+
+	// The control. Both halves mosh; without this a mask that simply killed
+	// everything would satisfy every suppression check below.
+	const Halves off = run( 0.0f, false );
+	CHECK( off.bright > 0.008f );
+	CHECK( off.dark > 0.002f );
+
+	// Masked: the bright half still moshes, the dark half is suppressed
+	// against what that same half did unmasked.
+	const Halves on = run( 1.0f, false );
+	CHECK( on.bright > 0.004f );
+	CHECK( on.dark < 0.25f * off.dark );
+
+	// Inverted: the same split, the other way round. The image is unchanged —
+	// only where the mosh lands moves.
+	const Halves flipped = run( 1.0f, true );
+	CHECK( flipped.dark > 0.001f );
+	CHECK( flipped.bright < 0.25f * off.bright );
+
+	// Half depth lands between the two, rather than snapping to one of them.
+	// That gradient is the whole reason the mask multiplies the gate instead of
+	// scaling the hold time, where a half-lit pixel and a fully lit one would
+	// both read as simply "held".
+	const Halves half = run( 0.5f, false );
+	CHECK( half.dark > on.dark );
+	CHECK( half.dark < off.dark );
+}
+
+TEST( LumaMaskUsesThisFramesLumaNotLastFrames )
+{
+	// PassLuma renders into luma.Back() and luma.Swap() runs AFTER PassMosh, so
+	// during the mosh pass Back() is this frame's luma and Front() is the
+	// previous frame's. Binding the wrong one is a one-word mistake that leaves
+	// the mask working perfectly on any footage where the mask does not move —
+	// which is every test built on a static split, including the one above.
+	//
+	// So: establish a mosh with the bright half on the left, then push ONE
+	// frame with the split flipped. A mask reading this frame protects the
+	// left; a mask reading last frame still protects the right.
+	constexpr int W = 160, H = 128;
+
+	std::vector< float > arm[ 2 ];
+	for( int i = 0; i < 2; ++i )
+	{
+		Rig rig;
+		CHECK( rig.Setup( W, H ) );
+
+		MoshParams params      = RawEstimatorParams();
+		params.moshAmount      = ( i == 0 ) ? 0.0f : 0.9f;
+		params.motionThreshold = 0.0f;
+		params.maskAmount      = 1.0f;
+
+		int frame = 0;
+		for( ; frame < 12; ++frame )
+		{
+			rig.texture.Upload( MakeSplitPattern( W, H, frame * 3.0f, 0.0f,
+			                                      0.68f, 0.02f, 0.30f, true ) );
+			params.frame = frame;
+			rig.pipeline.Advance( rig.Inputs(), params );
+		}
+		// One frame with the bright half on the RIGHT.
+		rig.texture.Upload( MakeSplitPattern( W, H, frame * 3.0f, 0.0f,
+		                                      0.68f, 0.02f, 0.30f, false ) );
+		params.frame = frame;
+		rig.pipeline.Advance( rig.Inputs(), params );
+
+		arm[ i ] = ReadTarget( rig.pipeline.GetAccumulation() );
+		rig.Teardown();
+	}
+
+	const float left  = HalfDifference( arm[ 0 ], arm[ 1 ], W, H, 12, true );
+	const float right = HalfDifference( arm[ 0 ], arm[ 1 ], W, H, 12, false );
+
+	// The bright half is now on the right, so that is the side still allowed to
+	// hold. Reading last frame's luma gives the mirror image of this.
+	CHECK( right > 0.001f );
+	CHECK( left < 0.5f * right );
 }
 
 TEST( GateIsIndependentOfFrameRate )

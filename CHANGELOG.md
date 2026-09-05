@@ -59,11 +59,49 @@ Notable changes to ffgl-datamosh. Format follows
 
 ### Added
 
+- **`Mask Amount` and `Mask Invert` — where the mosh is allowed to land.** The
+  mask comes from the brightness of the *motion* input, so in the effect that
+  is the clip's own brightness and in **Mosh Transplant** it is the other
+  layer's: a layer of scrolling text or a generator becomes a stencil that also
+  drives the movement, and `Motion Source` flips both together. Alpha comes
+  along for free, because the mask is computed before premultiplication is
+  undone, so a logo on a transparent background masks without a keying step.
+
+  It multiplies the motion gate rather than replacing it, so a region moshes
+  only where it is *both* bright and moving — which means a still mask layer in
+  the mixer does nothing, as a still motion layer always has. And it sits
+  outside the hold-time map, like the gate: folded inside, a half-lit pixel
+  would hold for 0.45 s against a fully lit one's 4 s, both reading simply as
+  "held", and the mask would collapse into a hard key with no midtones.
+  Outside, half depth is half the cross-fade weight, which is what makes it
+  paintable.
+
+  Both parameters are **appended**, never inserted, so no existing composition
+  reloads wrong — at the cost of a `Mask` panel region below `Output`, since
+  groups only collapse when consecutive. Neither is style-managed: a style
+  describes a character, a mask is where the instance sits in a composition,
+  and a managed mask would be wiped by picking any look.
+
+  Note the hazard, because it is this codebase's headline trap wearing a new
+  hat: dark footage at full Mask Amount produces no mosh anywhere, correctly,
+  and a plugin producing no mosh emits a pixel-exact copy of its input.
+
 - `GateIsIndependentOfFrameRate` — the same wall-clock interval delivered as
   four steps or as eight must leave the same picture, measured at a part-open
   gate. `DecayIsIndependentOfFrameRate` could not have caught this: it runs at
   Motion Threshold 0 on 3 px/frame motion, where the gate is exactly 1 and the
   normalisation is the identity.
+- `LumaMaskLocalisesTheMoshAndInvertSwapsIt`, and
+  `LumaMaskUsesThisFramesLumaNotLastFrames` — the mask must read the luma
+  `PassLuma` just wrote, not the previous frame's. Binding the wrong side is a
+  one-word mistake that behaves perfectly on any footage where the mask does
+  not move, so the second test flips the split for a single frame; it is the
+  only one of the two that fails when the wiring is wrong.
+- `NoStyleCanWipeTheMask` — every style, not just one, since a baseline written
+  by any of them would do it.
+- `MakeSplitPattern` in the harness: both halves carry the same contrast and
+  differ only in DC offset, so the estimator sees identical structure on each
+  side and anything that differs across the split can only be the mask.
 - `QuantiseDoesNotSilenceSlowMotion` — every Quantise setting must still visibly
   depart from passthrough at 1.5 px/frame. `EveryStylePresetChangesTheImage`
   moved from 3 px/frame to the same 1.5, because at 3 it passed on the exact
