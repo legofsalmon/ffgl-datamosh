@@ -86,6 +86,10 @@ public:
 	/// Intermediate buffers, exposed so the tests can assert on what the
 	/// estimator actually produced rather than on how the result looks.
 	const RenderTarget& GetFlowField() const { return flowHistory.Current(); }
+
+	/// The spreading damage field, so a test can assert that corruption reached
+	/// a block that never moved — which is the only evidence the feature works.
+	const RenderTarget& GetDamageField() const { return damage.Front(); }
 	/// The field from `framesAgo` back, for asserting on Motion Lag.
 	const RenderTarget& GetDelayedFlowField( int framesAgo ) const
 	{
@@ -110,7 +114,13 @@ private:
 	void PassControl( const MoshParams& params );
 	void PassMotionSearch( const MoshParams& params );
 	void PassFlowPost( const MoshParams& params );
+	void PassDamage( const MoshParams& params );
 	void PassMosh( const MoshParams& params );
+
+	/// The motion gate's cut-off in pixels. Two passes need the identical value
+	/// — a damage seed gated differently from the pixel it seeds is a field that
+	/// lights up blocks the warp will not mosh.
+	float ThresholdPixelsFor( const MoshParams& params ) const;
 
 	bool initialised = false;
 
@@ -120,6 +130,7 @@ private:
 	ffglex::FFGLShader controlShader;
 	ffglex::FFGLShader blockMatchShader;
 	ffglex::FFGLShader flowPostShader;
+	ffglex::FFGLShader damageShader;
 	ffglex::FFGLShader moshShader;
 	ffglex::FFGLShader compositeShader;
 	ffglex::FFGLShader passthroughShader;
@@ -129,6 +140,7 @@ private:
 	PingPong     luma;          ///< front = previous frame, back = current
 	PingPong     searchFlow;    ///< coarse-to-fine iteration within a frame
 	FlowHistory  flowHistory;   ///< conditioned fields, last N frames
+	PingPong     damage;        ///< per-block spreading damage, 0..1
 	PingPong     accum;         ///< the moshed image
 	RenderTarget sceneDiff;     ///< small change map, reduced via its mips
 	PingPong     state;         ///< 1x1 control state
@@ -177,6 +189,7 @@ private:
 		float decay           = 0.0f;
 		float maskAmount      = 0.0f;
 		bool  maskInvert      = false;
+		float spread          = 0.0f;
 		bool  hasHistory      = false;
 	} lastMosh;
 };

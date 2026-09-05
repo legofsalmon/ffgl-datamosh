@@ -17,6 +17,7 @@ enum class Pass : int
 	Control,
 	MotionSearch,
 	FlowPost,
+	Damage,
 	Mosh,
 	Composite,
 	Count

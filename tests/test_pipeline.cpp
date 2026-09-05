@@ -1043,6 +1043,213 @@ TEST( FullMoshAmountMasksTheBurstControls )
 	CHECK( levelAfter( 0.0f, true ) - levelAfter( 0.0f, false ) > 0.9f );
 }
 
+TEST( DamageSpreadsIntoBlocksThatNeverMoved )
+{
+	// The only evidence this feature works: the PICTURE changing in a block with
+	// no motion of its own. Everything else the plugin does is affine — decided
+	// from this frame's numbers alone — so a block that never moved could never
+	// mosh. This is the one pass with a spatial memory.
+	//
+	// Measuring the damage field instead would prove nothing. A field can be
+	// perfectly populated while the mosh pass ignores it entirely, and the first
+	// version of this test passed with exactly that bug reintroduced.
+	//
+	// A band down the left third moves; the rest is the same pattern standing
+	// still, so it has no motion of its own by construction. That still region
+	// also BRIGHTENS over the run, because a region whose content never changes
+	// cannot show whether it moshed — holding a pixel and refreshing it give the
+	// same colour when the pixel never changes.
+	constexpr int W = 256, H = 192;
+
+	auto render = []( float spread, float moshAmount ) {
+		Rig rig;
+		if( !rig.Setup( W, H ) )
+			return std::vector< float >();
+
+		MoshParams params      = RawEstimatorParams();
+		params.moshAmount      = moshAmount;
+		params.motionThreshold = 0.0f;
+		params.spread          = spread;
+
+		for( int frame = 0; frame < 30; ++frame )
+		{
+			const float seconds = frame / 60.0f;
+			rig.texture.Upload( MakeMovingBandPattern( W, H, seconds * 180.0f, 0.0f,
+			                                           0.33f, seconds * 0.6f ) );
+			params.frame = frame;
+			rig.pipeline.Advance( rig.Inputs(), params );
+		}
+		std::vector< float > out = ReadTarget( rig.pipeline.GetAccumulation() );
+		rig.Teardown();
+		return out;
+	};
+
+	// Mosh Amount 0 is an exact passthrough, so this is "how much did the effect
+	// do" — measured well outside the moving band, and inside the creep's reach.
+	const std::vector< float > reference = render( 0.0f, 0.0f );
+	auto stillRegion = [ & ]( float spread ) {
+		const std::vector< float > out = render( spread, 1.0f );
+		double                     total = 0.0;
+		int                        count = 0;
+		for( int y = 8; y < H - 8; ++y )
+		{
+			for( int x = static_cast< int >( W * 0.40f ); x < static_cast< int >( W * 0.60f ); ++x )
+			{
+				const size_t i = ( static_cast< size_t >( y ) * W + x ) * 4;
+				total += std::fabs( out[ i ] - reference[ i ] );
+				++count;
+			}
+		}
+		return count == 0 ? -1.0f : static_cast< float >( total / count );
+	};
+
+	// Spread 0 leaves the still region untouched — that is what makes this not a
+	// breaking change, and the pass runs every frame regardless.
+	const float off = stillRegion( 0.0f );
+	CHECK( off < 0.005f );
+
+	// Turned up, the creep reaches it and the region stops refreshing.
+	const float low  = stillRegion( 0.4f );
+	const float mid  = stillRegion( 0.7f );
+	const float high = stillRegion( 1.0f );
+	CHECK( mid > 0.03f );
+	// And further is further: the control has to have a range, not a switch.
+	CHECK( low > off );
+	CHECK( mid > low );
+	CHECK( high > mid );
+}
+
+TEST( DamageCreepIsIndependentOfFrameRate )
+{
+	// The trap this feature has, and the reason the spread is a dilation rather
+	// than a blur. A neighbourhood max advances the front by exactly its radius
+	// per pass, so a radius of speed*dt makes the distance covered depend only
+	// on wall-clock time — radii compose by addition. A mean blur is diffusion:
+	// its front advances as the square root of elapsed time and no coefficient
+	// recovers frame-rate independence.
+	//
+	// The still region does NOT brighten here, unlike the test above. A ramping
+	// brightness makes the block matcher find spurious motion, and it finds more
+	// of it at the coarser frame step — which seeds damage directly across the
+	// whole frame at 30fps and none of it at 60. That measures the test image,
+	// not the dilation, and it is what the first version of this test did.
+	constexpr int W = 512, H = 256;
+
+	auto frontAfterHalfASecond = []( int stepsPerSecond ) {
+		Rig rig;
+		if( !rig.Setup( W, H ) )
+			return -1.0f;
+
+		MoshParams params      = RawEstimatorParams();
+		params.moshAmount      = 1.0f;
+		params.motionThreshold = 0.0f;
+		params.spread          = 0.7f;
+		params.deltaTime       = 1.0f / stepsPerSecond;
+
+		const int steps = stepsPerSecond / 2;
+		for( int frame = 0; frame < steps; ++frame )
+		{
+			// The same wall-clock motion either way, so the seed is identical
+			// and only the number of dilation passes differs.
+			const float seconds = static_cast< float >( frame ) / stepsPerSecond;
+			rig.texture.Upload( MakeMovingBandPattern( W, H, seconds * 180.0f, 0.0f,
+			                                           0.33f, 0.0f ) );
+			params.frame = frame;
+			rig.pipeline.Advance( rig.Inputs(), params );
+		}
+
+		const RenderTarget&        field = rig.pipeline.GetDamageField();
+		const int                  fw    = field.GetWidth();
+		const int                  fh    = field.GetHeight();
+		const std::vector< float > data  = ReadTarget( field );
+
+		// How far right the front got, as a fraction of the width.
+		int furthest = 0;
+		for( int y = 0; y < fh; ++y )
+			for( int x = 0; x < fw; ++x )
+				if( data[ ( static_cast< size_t >( y ) * fw + x ) * 4 ] > 0.05f && x > furthest )
+					furthest = x;
+
+		rig.Teardown();
+		return static_cast< float >( furthest ) / static_cast< float >( fw );
+	};
+
+	const float atThirty = frontAfterHalfASecond( 30 );
+	const float atSixty  = frontAfterHalfASecond( 60 );
+
+	// Partway across, or this compares two fronts saturated against the frame
+	// edge, which would agree however wrong the arithmetic was. That is exactly
+	// how the first version of this test passed with the radius fixed per frame.
+	CHECK( atThirty > 0.40f );
+	CHECK( atThirty < 0.90f );
+	CHECK( atSixty > 0.40f );
+	CHECK( atSixty < 0.90f );
+	// Measured 0.500 against 0.531 — one block of 32 apart.
+	CHECK_NEAR( atThirty, atSixty, 0.08 );
+}
+
+TEST( ResetClearsTheDamageField )
+{
+	// Reset is a keyframe. The creep is spatial memory, so it has to go the way
+	// the vector field does — a damage front grown before a cut surviving it is
+	// exactly what Reset exists to abolish.
+	//
+	// Measured OUTSIDE the moving band, where only the creep can have put
+	// anything. Inside the band the frame after a Reset re-seeds immediately
+	// from live motion, so a whole-field mean stays high and asserting on it
+	// tests nothing — which is how the first version of this passed with the
+	// clear removed.
+	constexpr int W = 256, H = 192;
+
+	Rig rig;
+	CHECK( rig.Setup( W, H ) );
+
+	MoshParams params      = RawEstimatorParams();
+	params.moshAmount      = 1.0f;
+	params.motionThreshold = 0.0f;
+	params.spread          = 1.0f;
+
+	auto push = [ & ]( int frame ) {
+		rig.texture.Upload( MakeMovingBandPattern( W, H, frame * 3.0f, 0.0f, 0.33f, 0.0f ) );
+		params.frame = frame;
+		rig.pipeline.Advance( rig.Inputs(), params );
+	};
+
+	// Damage beyond the seeding band, which only the creep can reach.
+	auto beyondTheBand = [ & ]() {
+		const RenderTarget&        field = rig.pipeline.GetDamageField();
+		const int                  fw    = field.GetWidth();
+		const int                  fh    = field.GetHeight();
+		const std::vector< float > data  = ReadTarget( field );
+		double                     total = 0.0;
+		int                        count = 0;
+		for( int y = 0; y < fh; ++y )
+		{
+			for( int x = fw / 2; x < fw; ++x )
+			{
+				total += data[ ( static_cast< size_t >( y ) * fw + x ) * 4 ];
+				++count;
+			}
+		}
+		return count == 0 ? -1.0f : static_cast< float >( total / count );
+	};
+
+	int frame = 0;
+	for( ; frame < 30; ++frame )
+		push( frame );
+
+	const float grown = beyondTheBand();
+	CHECK( grown > 0.05f );
+
+	params.reset = true;
+	push( frame++ );
+	params.reset = false;
+
+	// One frame after the keyframe the creep has not had time to leave the band,
+	// so beyond it there must be essentially nothing.
+	CHECK( beyondTheBand() < 0.1f * grown );
+}
+
 TEST( LumaMaskLocalisesTheMoshAndInvertSwapsIt )
 {
 	// The mask reads the brightness of the MOTION input and decides where the

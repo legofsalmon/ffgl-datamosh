@@ -105,6 +105,29 @@ std::vector< uint8_t > MakeSplitPattern( int width, int height, float shiftX, fl
 	return image;
 }
 
+std::vector< uint8_t > MakeMovingBandPattern( int width, int height,
+                                              float shiftX, float shiftY,
+                                              float bandFraction, float stillOffset )
+{
+	std::vector< uint8_t > image( static_cast< size_t >( width ) * height * 4 );
+	const int              bandEnd = static_cast< int >( width * bandFraction );
+	for( int y = 0; y < height; ++y )
+	{
+		for( int x = 0; x < width; ++x )
+		{
+			const bool  moving = ( x < bandEnd );
+			const float base   = moving ? PatternAt( x - shiftX, y - shiftY )
+			                            : PatternAt( x, y ) * 0.6f + stillOffset;
+			const size_t i = ( static_cast< size_t >( y ) * width + x ) * 4;
+			image[ i + 0 ] = ToByte( base );
+			image[ i + 1 ] = ToByte( base * 0.9f + 0.05f );
+			image[ i + 2 ] = ToByte( base * 0.8f + 0.10f );
+			image[ i + 3 ] = 255;
+		}
+	}
+	return image;
+}
+
 std::vector< uint8_t > MakeSolid( int width, int height, uint8_t r, uint8_t g, uint8_t b )
 {
 	std::vector< uint8_t > image( static_cast< size_t >( width ) * height * 4 );

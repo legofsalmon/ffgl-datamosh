@@ -416,6 +416,23 @@
 							Useful as a safety net so a held mosh cannot stay collapsed forever.
 						</td>
 					</tr>
+					<tr>
+						<td>Spread</td>
+						<td>0 &ndash; 1</td>
+						<td>0</td>
+						<td class="desc">
+							Lets the damage creep outward into blocks that are not moving at
+							all. Everything else here decides each pixel from this frame alone,
+							so a still block could never mosh; this is the one control with a
+							memory of what happened next door. Corruption starts wherever the
+							motion is strongest and spreads from there, and when you bring the
+							level down the frontier goes out first, so it retreats the way it
+							came. The scale is a speed in frame heights per second, so it
+							travels at the same rate whatever the resolution, block size or
+							frame rate &mdash; and the same control sets how far it gets, since
+							the front dies where the damage fades.
+						</td>
+					</tr>
 				</tbody>
 			</table>
 			</div>
@@ -557,6 +574,15 @@
 					</tr>
 				</tbody>
 			</table>
+			</div>
+
+			<div class="note">
+				<span class="note-label">Why Spread sits at the bottom of Damage</span>
+				It belongs next to Decay by topic and is filed under Damage, but it was
+				added after the parameters below it existed. Resolume restores a saved
+				composition by parameter position, so slotting it in where it reads best
+				would shift everything after it and reload every older composition with
+				its values one slot out. Position is permanent; tidiness is not.
 			</div>
 
 			<div class="note accent">
@@ -740,11 +766,11 @@
 			</div>
 
 			<div class="note accent">
-				<span class="note-label">Style only owns twelve parameters</span>
+				<span class="note-label">Style only owns thirteen parameters</span>
 				Selecting a preset writes Motion Gain, Motion Smoothing, Motion
 				Threshold, Softness, Pixel Snap, Block Size, Motion Lag, Block Repeat,
-				Quantise, Corruption, Chroma Drift and Decay &mdash; and editing any of
-				those flips the dropdown back to Custom. Everything else &mdash;
+				Quantise, Corruption, Chroma Drift, Decay and Spread &mdash; and editing
+				any of those flips the dropdown back to Custom. Everything else &mdash;
 				<strong>Mosh Amount</strong>, Trigger, Hold, Reset, Auto Mode, Cut
 				Sensitivity, Burst Length, Beat Divisor, Invert Motion, Audio, Mix,
 				Quality, <strong>Mask Amount</strong> and Mask Invert &mdash; is neither

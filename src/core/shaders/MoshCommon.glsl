@@ -97,6 +97,27 @@ vec2 MoshQuantise( vec2 flow, float quantise, float blockPixels, vec2 frameRes )
 	return round( flow / stepUV ) * stepUV;
 }
 
+// Where the spreading-damage field counts as "reached". The field's magnitude
+// encodes REACH — how recently the creep arrived — not intensity, and feeding
+// it to persistence raw conflates the two. Badly: persistence is a per-frame
+// rate, so a damage of 0.4 survives as 0.4^n and is indistinguishable from no
+// hold at all within three frames. Measured before this existed, a field
+// averaging 0.39 across a still region moved the image by 0.0000.
+//
+// What the field actually says is "the corruption has arrived here", and a
+// block the corruption has reached is corrupted, not 40% corrupted. So the
+// field's magnitude decides where the front IS, and this decides what being
+// inside it means. The soft band keeps the frontier from being a hard cut.
+const float DAMAGE_EDGE_LO = 0.02;
+const float DAMAGE_EDGE_HI = 0.35;
+
+/// The gate opening a block has because the corruption crept into it, as
+/// opposed to because it is moving.
+float MoshDamageOpening( float damage )
+{
+	return smoothstep( DAMAGE_EDGE_LO, DAMAGE_EDGE_HI, clamp( damage, 0.0, 1.0 ) );
+}
+
 /// Still regions keep refreshing normally; moving ones carry old pixels forward.
 /// Threshold at 0 moshes everything, which gives the full melt.
 float MoshGate( float motionPixels, float thresholdPixels )

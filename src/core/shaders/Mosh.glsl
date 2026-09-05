@@ -20,6 +20,7 @@ uniform sampler2D AccumPrev;  // what we displayed last frame
 uniform sampler2D Flow;       // conditioned vector field, at block resolution
 uniform sampler2D State;      // 1x1 control state; .r is the mosh level
 uniform sampler2D MaskLuma;   // this frame's luma, from the MOTION input
+uniform sampler2D Damage;     // per-block spreading damage, at block resolution
 
 uniform vec2  FrameRes;
 uniform vec2  FlowRes;
@@ -32,6 +33,7 @@ uniform float Quantise;         // 0..1 coarseness of the displacement grid
 uniform float BlockPixels;      // macroblock edge, the coarsest sensible step
 uniform float MaskAmount;       // 0 the mask is inert, 1 fully applied
 uniform bool  MaskInvert;       // mosh the dark parts instead
+uniform bool  HasSpread;        // false when Spread is 0, and then Damage is 0
 uniform float Decay;
 uniform float Corruption;
 uniform float BlockRepeat;
@@ -133,19 +135,45 @@ void main()
 	// existing composition renders unchanged.
 	float mask = mix( 1.0, shaped, clamp( MaskAmount, 0.0, 1.0 ) );
 
+	// The creep. Sampled at the block centre, because the field IS per block
+	// and interpolating it would soften a front whose hard edge is the whole
+	// point of a dilation.
+	//
+	// max, not multiply, and it replaces the GATE rather than the level. Where
+	// a block genuinely moves the damage is at most what the gate already is,
+	// so max returns the gate and the arithmetic is untouched; where a block is
+	// still, the gate is ~0 and the damage supplies the opening. Combining with
+	// max is idempotent, so the gate is never squared on a seeded block.
+	//
+	// It must NOT be substituted for moshLevel. Inside the hold-time exponent a
+	// value of 0.02 becomes a persistence of about 0.135 — seven times too
+	// sticky — and Motion Threshold stops meaning anything. Same trap the gate
+	// has, and the reason both stay out here.
+	float damage = 0.0;
+	if( HasSpread )
+	{
+		vec2 blockCentre = ( floor( uv * FlowRes ) + 0.5 ) / FlowRes;
+		damage           = MoshDamageOpening( texture( Damage, blockCentre ).r );
+	}
+
 	// One spatial term, normalised once. The gate asks whether this pixel is
-	// moving and the mask asks whether it is allowed to hold; both vary across
-	// the frame, so both belong in here rather than each inventing its own
-	// frame-rate treatment beside the other. Three normalisations with three
+	// moving, the damage asks whether the corruption has reached it, and the
+	// mask asks whether it is allowed to hold at all. All three vary across the
+	// frame, so all three belong in here rather than each inventing its own
+	// frame-rate treatment beside the others. Three normalisations with three
 	// comments is how divergence starts.
 	//
-	// The mask stays OUTSIDE the hold-time map for the same reason the gate
-	// does. Folded into the exponent, a half-lit pixel would sit at a 0.45s
-	// hold against a fully lit pixel's 4s — perceptually both "held" — so the
-	// mask would collapse into a hard key and lose every midtone. Out here,
-	// mask 0.5 is literally half the cross-fade weight, and that gradient is
-	// what makes it paintable.
-	float spatial     = MoshGate( motionPixels, ThresholdPixels ) * mask;
+	// The mask multiplies AFTER the max, so it attenuates the creep instead of
+	// carving it. The field stays a property of the footage: moving the mask
+	// does not force it to re-grow, and it can still be shown as its own layer.
+	//
+	// Both stay OUTSIDE the hold-time map for the same reason the gate does.
+	// Folded into the exponent, a half-lit pixel would sit at a 0.45s hold
+	// against a fully lit pixel's 4s — perceptually both "held" — so the mask
+	// would collapse into a hard key and lose every midtone. Out here, mask 0.5
+	// is literally half the cross-fade weight, and that gradient is what makes
+	// it paintable.
+	float spatial     = max( MoshGate( motionPixels, ThresholdPixels ), damage ) * mask;
 	float persistence = clamp( keep * retention * MoshNormaliseSpatial( spatial, DeltaTime ),
 	                           0.0, 1.0 );
 

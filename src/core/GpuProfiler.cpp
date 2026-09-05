@@ -14,6 +14,7 @@ const char* PassName( Pass pass )
 	case Pass::Control:      return "control";
 	case Pass::MotionSearch: return "motion-search";
 	case Pass::FlowPost:     return "flow-post";
+	case Pass::Damage:       return "damage";
 	case Pass::Mosh:         return "mosh";
 	case Pass::Composite:    return "composite";
 	case Pass::Count:        break;
