@@ -10,6 +10,7 @@
 #include "FlowPost.glsl.h"
 #include "Ingest.glsl.h"
 #include "Luma.glsl.h"
+#include "DamageSpread.glsl.h"
 #include "Mosh.glsl.h"
 #include "MoshCommon.glsl.h"
 #include "Passthrough.glsl.h"
@@ -130,6 +131,7 @@ bool MoshPipeline::CompileShaders()
 	       CompileOne( controlShader, shaders::Control, "Control" ) &&
 	       CompileOne( blockMatchShader, shaders::BlockMatch, "BlockMatch" ) &&
 	       CompileOne( flowPostShader, shaders::FlowPost, "FlowPost" ) &&
+	       CompileOne( damageShader, shaders::DamageSpread, "DamageSpread" ) &&
 	       CompileOne( moshShader, common + shaders::Mosh, "Mosh" ) &&
 	       CompileOne( compositeShader, common + shaders::Composite, "Composite" ) &&
 	       CompileOne( passthroughShader, shaders::Passthrough, "Passthrough" );
@@ -141,6 +143,7 @@ void MoshPipeline::ReleaseTargets()
 	luma.Release();
 	searchFlow.Release();
 	flowHistory.Release();
+	damage.Release();
 	accum.Release();
 	sceneDiff.Release();
 	state.Release();
@@ -166,6 +169,7 @@ void MoshPipeline::Release()
 	controlShader.FreeGLResources();
 	blockMatchShader.FreeGLResources();
 	flowPostShader.FreeGLResources();
+	damageShader.FreeGLResources();
 	moshShader.FreeGLResources();
 	compositeShader.FreeGLResources();
 	passthroughShader.FreeGLResources();
@@ -199,6 +203,9 @@ bool MoshPipeline::EnsureResources( GLsizei width, GLsizei height, int blockSize
 		// A ring rather than a ping-pong, so Motion Lag can reach back several
 		// frames. Block resolution keeps the whole thing around a megabyte.
 		flowHistory.Allocate( flowWidth, flowHeight, GL_RGBA16F ) &&
+		// Block resolution and one channel: the whole feedback field costs less
+		// than a thousandth of the accumulation buffer whose fate it decides.
+		damage.Allocate( flowWidth, flowHeight, GL_R16F ) &&
 		// 16F, not 8-bit: this buffer is resampled into itself every frame, and
 		// at 8 bits the rounding compounds into visible banding within seconds.
 		accum.Allocate( width, height, GL_RGBA16F ) &&
@@ -223,6 +230,7 @@ bool MoshPipeline::EnsureResources( GLsizei width, GLsizei height, int blockSize
 	luma.Clear();
 	searchFlow.Clear();
 	flowHistory.Clear();
+	damage.Clear();
 	accum.Clear();
 	sceneDiff.Clear();
 	state.Clear();
@@ -245,7 +253,7 @@ void MoshPipeline::LogVramBudget() const
 size_t MoshPipeline::GetVramBytes() const
 {
 	return colourTarget.ByteSize() + luma.ByteSize() + searchFlow.ByteSize() +
-	       flowHistory.ByteSize() + accum.ByteSize() + sceneDiff.ByteSize() + state.ByteSize();
+	       flowHistory.ByteSize() + damage.ByteSize() + accum.ByteSize() + sceneDiff.ByteSize() + state.ByteSize();
 }
 
 // ---------------------------------------------------------------------------
@@ -435,6 +443,51 @@ void MoshPipeline::PassFlowPost( const MoshParams& params )
 	flowHistory.Advance();
 }
 
+float MoshPipeline::ThresholdPixelsFor( const MoshParams& params ) const
+{
+	// Squared: per-frame motion on ordinary footage is mostly 0.5–3px, so a
+	// linear 0–8px slider keeps the whole decision in its bottom quarter and
+	// turns the rest into a wall. t² puts 0.5 at 2px instead of 4. Endpoints
+	// are unchanged. Then clamped below the pyramid's reach, so no Quality
+	// setting can make the gate unclearable.
+	//
+	// Shared by PassDamage and PassMosh rather than computed twice: a damage
+	// seed gated differently from the pixel it seeds is a field that lights up
+	// blocks the warp will never mosh.
+	const float t = params.motionThreshold;
+	return std::min( t * t * THRESHOLD_PIXEL_RANGE, maxPixels * 0.75f );
+}
+
+void MoshPipeline::PassDamage( const MoshParams& params )
+{
+	ScopedPassTimer timer( profiler, Pass::Damage );
+
+	ffglex::ScopedShaderBinding shaderBinding( damageShader.GetGLID() );
+	ffglex::ScopedFBOBinding    fboBinding( damage.Back().GetFBO(), ffglex::ScopedFBOBinding::RB_REVERT );
+	ScopedViewport              viewport( flowWidth, flowHeight );
+
+	PassTextures textures;
+	textures.Add( damageShader, "PrevDamage", damage.Front().GetTexture() );
+	// The same field PassMosh will warp with, so the seed's gate and the pixel's
+	// gate are computed from identical vectors.
+	textures.Add( damageShader, "Flow", flowHistory.Delayed( params.motionLag ).GetTexture() );
+	textures.Add( damageShader, "State", state.Front().GetTexture() );
+
+	damageShader.Set( "FlowRes", static_cast< float >( flowWidth ), static_cast< float >( flowHeight ) );
+	damageShader.Set( "FrameRes", static_cast< float >( frameWidth ), static_cast< float >( frameHeight ) );
+	damageShader.Set( "BlockPixels", static_cast< float >( activeBlockSize ) );
+	damageShader.Set( "ThresholdPixels", ThresholdPixelsFor( params ) );
+	damageShader.Set( "Spread", params.spread );
+	damageShader.Set( "DeltaTime", params.deltaTime );
+	damageShader.Set( "HasHistory", hasHistory ? 1 : 0 );
+	damageShader.Set( "MaxUV", 1.0f, 1.0f );
+
+	quad.Draw();
+
+	fboBinding.EndScope();
+	damage.Swap();
+}
+
 void MoshPipeline::PassMosh( const MoshParams& params )
 {
 	ScopedPassTimer timer( profiler, Pass::Mosh );
@@ -454,6 +507,8 @@ void MoshPipeline::PassMosh( const MoshParams& params )
 	// the mixer that is the motion input, not the pixel input, which is what
 	// makes the motion layer's brightness the mask.
 	textures.Add( moshShader, "MaskLuma", luma.Back().GetTexture() );
+	// PassDamage swapped after writing, so Front() is this frame's field.
+	textures.Add( moshShader, "Damage", damage.Front().GetTexture() );
 
 	moshShader.Set( "FrameRes", static_cast< float >( frameWidth ), static_cast< float >( frameHeight ) );
 	moshShader.Set( "FlowRes", static_cast< float >( flowWidth ), static_cast< float >( flowHeight ) );
@@ -461,13 +516,7 @@ void MoshPipeline::PassMosh( const MoshParams& params )
 	moshShader.Set( "Softness", params.softness );
 	moshShader.Set( "PelSnap", params.pelSnap );
 	moshShader.Set( "Direction", params.invertDirection ? -1.0f : 1.0f );
-	// Squared: per-frame motion on ordinary footage is mostly 0.5–3px, so a
-	// linear 0–8px slider keeps the whole decision in its bottom quarter and
-	// turns the rest into a wall. t² puts 0.5 at 2px instead of 4. Endpoints
-	// are unchanged. Then clamped below the pyramid's reach, so no Quality
-	// setting can make the gate unclearable.
-	const float t               = params.motionThreshold;
-	const float thresholdPixels = std::min( t * t * THRESHOLD_PIXEL_RANGE, maxPixels * 0.75f );
+	const float thresholdPixels = ThresholdPixelsFor( params );
 	moshShader.Set( "ThresholdPixels", thresholdPixels );
 	// Quantise moved here from PassFlowPost: it belongs downstream of the gate,
 	// so a vector that rounds away cannot close the gate with it.
@@ -475,6 +524,9 @@ void MoshPipeline::PassMosh( const MoshParams& params )
 	moshShader.Set( "BlockPixels", static_cast< float >( activeBlockSize ) );
 	moshShader.Set( "MaskAmount", params.maskAmount );
 	moshShader.Set( "MaskInvert", params.maskInvert ? 1 : 0 );
+	// The Spread-0 identity is enforced here, at the one consumer, rather than
+	// by skipping the pass that produces the field.
+	moshShader.Set( "HasSpread", params.spread > 0.0f ? 1 : 0 );
 	moshShader.Set( "Decay", params.decay );
 	moshShader.Set( "Corruption", params.corruption );
 	moshShader.Set( "BlockRepeat", params.blockRepeat );
@@ -496,6 +548,7 @@ void MoshPipeline::PassMosh( const MoshParams& params )
 	lastMosh.decay           = params.decay;
 	lastMosh.maskAmount      = params.maskAmount;
 	lastMosh.maskInvert      = params.maskInvert;
+	lastMosh.spread          = params.spread;
 	lastMosh.hasHistory      = hasHistory;
 
 	fboBinding.EndScope();
@@ -529,6 +582,16 @@ bool MoshPipeline::Advance( const FrameInputs& inputs, const MoshParams& params 
 	if( params.reset )
 	{
 		flowHistory.Clear();
+		// The creep is spatial memory, so it has to go the same way the vector
+		// field does. A damage front grown before the cut is exactly the kind of
+		// thing Reset exists to abolish.
+		//
+		// Belt and braces: dropping hasHistory already suppresses the one read
+		// of the field, and that frame's own output overwrites the buffer, so
+		// the stale front can never be read back. Removing either alone changes
+		// nothing — ResetClearsTheDamageField only fails with both gone — but
+		// two lines guarding a feedback buffer is the right price.
+		damage.Clear();
 		hasHistory = false;
 	}
 
@@ -538,6 +601,12 @@ bool MoshPipeline::Advance( const FrameInputs& inputs, const MoshParams& params 
 	PassControl( params );
 	PassMotionSearch( params );
 	PassFlowPost( params );
+	// Unconditionally, even at Spread 0. Skipping would leave stale contents in
+	// damage.Back(), which becomes Front() after the next swap — the classic
+	// stale-feedback bug. At block resolution it is a few thousand fragments,
+	// and the Spread-0 identity is enforced at the consumer instead, in one
+	// place where it can be read.
+	PassDamage( params );
 	PassMosh( params );
 
 	// Only now is the previous frame's luma finished with.

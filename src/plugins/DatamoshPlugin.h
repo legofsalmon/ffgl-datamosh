@@ -311,6 +311,13 @@ void DatamoshPlugin< HostBase >::DeclareCommonParams()
 	AddGrouped( "Mask", ParamRange::Create( "Mask Amount", 0.0f, Range( 0.0f, 1.0f ) ) );
 	AddGrouped( "Mask", ParamBool::Create( "Mask Invert", false ) );
 
+	// Filed under "Damage" by topic but appended here by necessity, for the
+	// same reason as the mask above: the host restores values by index, so
+	// slotting it next to Decay where it belongs would shift the five
+	// parameters below it and reload every 0.2.0 composition with Audio Amount
+	// in Audio Band's slot. Position is permanent; tidiness is not.
+	AddGrouped( "Damage", ParamRange::Create( "Spread", 0.0f, Range( 0.0f, 1.0f ) ) );
+
 	// Exactly the parameters ApplyStyle writes. Nothing else can invalidate a
 	// style, so Trigger, Mix, Quality and the rest leave the dropdown alone.
 	autoModeIndex       = ParamIndex( "Auto Mode" );
@@ -327,7 +334,12 @@ void DatamoshPlugin< HostBase >::DeclareCommonParams()
 		// dropdown to Custom, so the panel keeps saying which look you are in.
 		"Motion Gain", "Motion Smoothing", "Motion Threshold",
 		"Softness", "Pixel Snap", "Motion Lag", "Block Repeat", "Quantise",
-		"Corruption", "Chroma Drift", "Decay", "Block Size"
+		"Corruption", "Chroma Drift", "Decay", "Block Size",
+		// Spread is here and the mask is not, which looks inconsistent and is
+		// not: Spread describes what the damage DOES, which is character, while
+		// the mask describes where this instance sits in a composition. A style
+		// owns the first and must never touch the second.
+		"Spread"
 	};
 	for( const char* name : MANAGED )
 	{
@@ -446,6 +458,7 @@ void DatamoshPlugin< HostBase >::ApplyStyle( int style )
 	PushParam( "Corruption", 0.0f );
 	PushParam( "Chroma Drift", 0.0f );
 	PushParam( "Decay", 0.0f );
+	PushParam( "Spread", 0.0f );
 	PushOption( "Block Size", 16.0f );
 
 	switch( static_cast< Style >( style ) )
@@ -616,6 +629,8 @@ MoshParams DatamoshPlugin< HostBase >::ReadParams() const
 	params.motionLag      = static_cast< int >( ParamValue( "Motion Lag" ) + 0.5f );
 	params.blockRepeat    = ParamValue( "Block Repeat" );
 	params.motionQuantise = ParamValue( "Quantise" );
+
+	params.spread     = ParamValue( "Spread" );
 
 	params.maskAmount = ParamValue( "Mask Amount" );
 	params.maskInvert = ParamValue( "Mask Invert" ) > 0.5f;

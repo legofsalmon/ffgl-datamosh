@@ -142,6 +142,24 @@ Chroma Drift     0.4</code></pre>
 				Size</strong> with it.
 			</div>
 
+			<h3>Letting the damage creep</h3>
+			<p>
+				<strong>Spread</strong> is the only control here with a memory of what
+				happened next door. Everything else decides each pixel from this frame
+				alone, so a block that is not moving can never mosh; with Spread up, the
+				corruption starts where the motion is strongest and crawls outward into
+				still parts of the frame.
+			</p>
+			<p>
+				It reads as a gesture rather than a setting, because bringing the level
+				back down makes the frontier go out first &mdash; the damage retreats the
+				way it came instead of snapping off. Ride <strong>Mosh Amount</strong>
+				with Spread up and the creep grows and recedes with your hand.
+			</p>
+			<pre><code>Spread           0.7
+Mosh Amount      ride it      &larr; the creep reaches as far as you push
+Motion Threshold 0.2          &larr; a clear seed for it to start from</code></pre>
+
 			<h3>Painting where it lands</h3>
 			<p>
 				<strong>Mask Amount</strong> lets the brightness of the motion input decide

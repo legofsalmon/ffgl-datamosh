@@ -38,6 +38,23 @@ std::vector< uint8_t > MakeSplitPattern( int width, int height, float shiftX, fl
                                          float brightLo, float darkLo, float amp,
                                          bool brightLeft );
 
+/// RGBA8 image where only a band down the left-hand side moves.
+///
+/// `bandFraction` of the width is the reference pattern displaced by
+/// (shiftX, shiftY); the rest is the same pattern standing perfectly still,
+/// lifted by `stillOffset`. The point is to have a region with genuine motion
+/// and a region with provably none, so a test can assert that something reached
+/// the still one.
+///
+/// `stillOffset` exists because a truly unchanging region cannot show whether
+/// it moshed: holding a pixel and refreshing it both produce the same colour
+/// when the pixel never changes. Ramping the offset over a run makes the still
+/// region change WITHOUT moving, which is the only way the difference between
+/// held and refreshed becomes visible there.
+std::vector< uint8_t > MakeMovingBandPattern( int width, int height,
+                                              float shiftX, float shiftY,
+                                              float bandFraction, float stillOffset );
+
 /// Flat RGBA8 image, for cut-detection tests.
 std::vector< uint8_t > MakeSolid( int width, int height, uint8_t r, uint8_t g, uint8_t b );
 

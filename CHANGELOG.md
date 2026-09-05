@@ -59,6 +59,47 @@ Notable changes to ffgl-datamosh. Format follows
 
 ### Added
 
+- **`Spread` — damage that creeps into blocks which never moved.** Everything
+  else this plugin does is affine: a per-pixel decision computed from this
+  frame's numbers alone, so a block with no motion of its own could never mosh.
+  This is the one pass with a spatial memory. Corruption starts where the motion
+  is strongest and spreads outward from there; when the level falls the frontier
+  is always the faintest part of the field, so it goes out first and the damage
+  retreats the way it came. It reads as a gesture rather than a setting.
+
+  Two rates, both per *second*, and the second is the one that would have been
+  missed. The attenuation is a half-life, like Decay. The kernel **radius** is
+  `speed × dt` — a fixed per-frame radius is a per-frame rate wearing a spatial
+  disguise, moving the front twice as fast at 120 fps as at 60. And the spread
+  is a **dilation**, not a blur: a mean blur is diffusion, whose front advances
+  as the square root of elapsed time with no coefficient that recovers
+  frame-rate independence, while a max dilation composes radii by addition
+  exactly. Measured over the same half-second, the front reached 0.500 of the
+  frame at 30 fps against 0.531 at 60 — one block of 32 apart.
+
+  The field's magnitude encodes *reach*, not intensity, so it is shaped into a
+  gate opening rather than used raw. Raw, it conflated the two and did nothing
+  visible: persistence is a per-frame rate, so a damage of 0.4 survives as
+  `0.4ⁿ` and is indistinguishable from no hold within three frames — a field
+  averaging 0.39 across a still region moved the image by 0.0000. A block the
+  corruption has reached is corrupted, not 40% corrupted.
+
+  It `max`es into the spatial term rather than multiplying, and replaces the
+  *gate* rather than the level. Where a block genuinely moves the damage is at
+  most what the gate already is, so `max` returns the gate and nothing changes;
+  where a block is still, the gate is ~0 and the damage supplies the opening.
+  Substituting it for the mosh level instead would put 0.02 through the hold-map
+  and come out at 0.135 — seven times too sticky — and Motion Threshold would
+  stop meaning anything.
+
+  Style-managed, unlike the mask, and the difference is the point: `Spread`
+  describes what the damage *does*, which is character, while a mask is where an
+  instance sits in a composition. `Reset` clears the field, since a damage front
+  grown before a cut surviving it is what `Reset` exists to abolish. Appended
+  rather than inserted next to `Decay` where it belongs by topic, for the same
+  index-stability reason as the mask. Costs one `GL_R16F` target at block
+  resolution — 32 KB at 1080p and the default Block Size.
+
 - **`Mask Amount` and `Mask Invert` — where the mosh is allowed to land.** The
   mask comes from the brightness of the *motion* input, so in the effect that
   is the clip's own brightness and in **Mosh Transplant** it is the other
@@ -91,6 +132,21 @@ Notable changes to ffgl-datamosh. Format follows
   gate. `DecayIsIndependentOfFrameRate` could not have caught this: it runs at
   Motion Threshold 0 on 3 px/frame motion, where the gate is exactly 1 and the
   normalisation is the identity.
+- `DamageSpreadsIntoBlocksThatNeverMoved`, `DamageCreepIsIndependentOfFrameRate`
+  and `ResetClearsTheDamageField`. All three passed on their first draft **and
+  all three still passed with the thing they covered reintroduced** — the
+  clearest demonstration yet of why this repo re-breaks every fix. The first
+  measured the damage field, which a mosh pass ignoring it entirely leaves
+  perfectly populated; it now measures the picture. The second compared two
+  fronts already saturated against the frame edge, which agree however wrong the
+  arithmetic is; it now runs on a frame wide enough to catch them partway. The
+  third measured a whole-field mean, which stays high because the frame after a
+  Reset re-seeds immediately; it now measures beyond the seeding band, where only
+  the creep can have put anything.
+- `MakeMovingBandPattern` in the harness — a band that moves beside a region that
+  provably does not. Its still region can also be made to brighten, because a
+  region whose content never changes cannot show whether it moshed: holding a
+  pixel and refreshing it give the same colour when the pixel never changes.
 - `LumaMaskLocalisesTheMoshAndInvertSwapsIt`, and
   `LumaMaskUsesThisFramesLumaNotLastFrames` — the mask must read the luma
   `PassLuma` just wrote, not the previous frame's. Binding the wrong side is a

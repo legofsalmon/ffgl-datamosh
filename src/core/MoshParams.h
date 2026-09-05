@@ -97,6 +97,10 @@ struct MoshParams
 	/// Snaps vectors to a coarse grid the way a low-bitrate encoder must,
 	/// giving stepped chunky motion rather than smooth displacement.
 	float motionQuantise = 0.0f;
+	/// 0..1 how fast damage creeps outward from the blocks that seeded it, as a
+	/// speed in frame heights per second on a log scale. 0 is off and the field
+	/// stays exactly empty, which is what makes this not a breaking change.
+	float spread         = 0.0f;
 
 	// --- Mask -------------------------------------------------------------
 	/// 0..1 depth of the luma mask on the persistence gate. The mask comes from
