@@ -26,11 +26,16 @@ static CFFGLPluginInfo PluginInfo(
 	PluginFactory< datamosh::DatamoshEffect >,
 	"DMSH",         // unique ID, maximum four characters
 	PLUGIN_NAME,
-	2,              // FFGL API major
-	1,              // FFGL API minor
-	0,              // plugin major
-	1,              // plugin minor
+	2,                        // FFGL API major
+	1,                        // FFGL API minor
+	DATAMOSH_VERSION_MAJOR,   // plugin major
+	DATAMOSH_VERSION_MINOR,   // plugin minor
 	FF_EFFECT,
-	"Simulated datamosh: melt, bloom and pixel drag driven by estimated motion",
-	"ffgl-datamosh"
+	// The full three-component version rides in the description, which is a
+	// std::string inside CFFGLPluginInfo and so has no length limit — unlike
+	// PluginName above, and unlike the two integers, which cannot express a
+	// patch. This is the only field that carries the whole truth to the host.
+	"Simulated datamosh: melt, bloom and pixel drag driven by estimated motion"
+	" (v" DATAMOSH_VERSION ")",
+	"ffgl-datamosh " DATAMOSH_VERSION
 );

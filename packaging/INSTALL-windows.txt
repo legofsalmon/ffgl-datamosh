@@ -44,6 +44,18 @@ Windows reports, which OneDrive often redirects -- check whether your Documents
 live under OneDrive and use that copy of the path.
 
 
+Which version do I have?
+------------------------
+
+Right-click Datamosh.dll, choose Properties, then the Details tab, and read
+File version. Both DLLs carry it. Inside Resolume the version is also on the
+end of the effect's description, and on the "datamosh:" line the plugin writes
+to Resolume's log the first time it allocates buffers.
+
+The plugin's own NAME never carries the version, deliberately. Resolume
+addresses an effect by its name, so a name that changed every release would be
+a saved composition that quietly failed to find its effect after an upgrade.
+
 Requirements
 ------------
 

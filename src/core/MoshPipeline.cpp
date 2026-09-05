@@ -246,7 +246,7 @@ void MoshPipeline::LogVramBudget() const
 	FFGLLog::LogToHost( ( "datamosh: " + std::to_string( frameWidth ) + "x" +
 	                      std::to_string( frameHeight ) + ", " + std::to_string( flowWidth ) + "x" +
 	                      std::to_string( flowHeight ) + " blocks, " + std::to_string( megabytes ) +
-	                      " MB of buffers" )
+	                      " MB of buffers (v" DATAMOSH_VERSION ")" )
 	                        .c_str() );
 }
 

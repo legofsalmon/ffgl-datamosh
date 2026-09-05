@@ -51,6 +51,18 @@ This zip, if you would rather copy files by hand
    effects list. It applies that layer's motion to the layers below it.
 
 
+Which version do I have?
+------------------------
+
+Right-click Datamosh.bundle in Finder, choose Get Info, and read Version.
+Both bundles carry it. Inside Resolume the version is also on the end of the
+effect's description, and on the "datamosh:" line the plugin writes to
+Resolume's log the first time it allocates buffers.
+
+The plugin's own NAME never carries the version, deliberately. Resolume
+addresses an effect by its name, so a name that changed every release would be
+a saved composition that quietly failed to find its effect after an upgrade.
+
 Requirements
 ------------
 

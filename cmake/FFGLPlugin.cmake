@@ -91,7 +91,7 @@ endif()
 # ---------------------------------------------------------------------------
 
 function( datamosh_add_plugin TARGET )
-    cmake_parse_arguments( ARG "" "" "SOURCES" ${ARGN} )
+    cmake_parse_arguments( ARG "" "DESCRIPTION" "SOURCES" ${ARGN} )
 
     if( APPLE )
         add_library( ${TARGET} MODULE ${ARG_SOURCES} )
@@ -117,6 +117,18 @@ function( datamosh_add_plugin TARGET )
             # FFGL.h already marks plugMain dllexport, but hosts look the symbol
             # up by exact name, so the .def keeps it undecorated for certain.
             target_sources( ${TARGET} PRIVATE "${CMAKE_SOURCE_DIR}/cmake/FFGLPlugin.def" )
+
+            # A version resource, so Explorer's Properties -> Details can answer
+            # "which build is this?" on an installed DLL. macOS has answered it
+            # since 0.1 through the bundle's Info.plist; this closes the gap on
+            # the platform that had nothing. A .res contributes no symbols, so
+            # it cannot disturb the OBJECT-library arrangement above that keeps
+            # plugMain from being discarded.
+            set( DATAMOSH_RC_TARGET "${TARGET}" )
+            set( DATAMOSH_RC_DESCRIPTION "${ARG_DESCRIPTION}" )
+            set( _rc "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}Version.rc" )
+            configure_file( "${CMAKE_SOURCE_DIR}/cmake/DatamoshVersion.rc.in" "${_rc}" @ONLY )
+            target_sources( ${TARGET} PRIVATE "${_rc}" )
         endif()
     endif()
 

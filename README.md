@@ -75,7 +75,7 @@ Install straight into Resolume with
 ## Test
 
 ```sh
-ctest --test-dir build --output-on-failure   # 44 tests
+ctest --test-dir build --output-on-failure   # 57 tests
 ./build/tests/datamosh_tests --profile        # per-pass GPU timing
 ```
 
@@ -95,7 +95,7 @@ tests, verifies the entry point and the macOS architectures, and publishes a
 GitHub Release with the archives attached.
 
 ```sh
-git tag v0.2.0 && git push origin v0.2.0
+git tag v0.3.0 && git push origin v0.3.0
 ```
 
 A release can also be cut from **Actions → release → Run workflow** by entering

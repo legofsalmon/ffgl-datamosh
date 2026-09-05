@@ -15,6 +15,7 @@
 
 #include <cmath>
 #include <cstdio>
+#include <limits>
 #include <cstring>
 #include <vector>
 
@@ -1136,6 +1137,56 @@ TEST( GateViewDrawsThisFramesMaskNotLastFrames )
 	CHECK( rightAfter > 1.5f * rightBefore );
 
 	plugin.DeInitGL();
+}
+
+TEST( OutOfRangeOptionValuesAreClampedNotIndexed )
+{
+	// ffglqs::ParamOption::SetValue clamps the stored value when the index is
+	// out of range and then indexes `options` with the UNCLAMPED index anyway,
+	// so an out-of-range write reads past the end of the vector. The SDK's own
+	// Plugin::SetFloatParameter bounds-checks the parameter index but passes
+	// the value straight through, so a host can reach it.
+	//
+	// This is not hypothetical. It is the case the View parameter's fallback
+	// exists for: a composition saved by a later build with one more Style
+	// entry, restored into a build whose list is shorter. Without the clamp
+	// that is an out-of-bounds read on open, which is a crash rather than the
+	// graceful fallback the docs promise.
+	TestableEffect plugin;
+
+	struct Entry { const char* name; int count; };
+	// Every option parameter, with how many entries each actually has.
+	const Entry OPTIONS[] = {
+		{ "Style", 7 },       // Custom + 5 looks + Default
+		{ "Auto Mode", 3 },
+		{ "Block Size", 4 },
+		{ "Audio Band", 2 },
+		{ "Quality", 4 },
+		{ "View", 3 },
+	};
+
+	for( const Entry& entry : OPTIONS )
+	{
+		const unsigned int index = plugin.ParamIndex( entry.name );
+		CHECK( index != TestableEffect::NO_PARAM );
+
+		// Well past the end, one past the end, negative, and NaN. Each must be
+		// survivable and must leave the parameter on a real entry.
+		const float BAD[] = { static_cast< float >( entry.count ), 99.0f, -1.0f,
+		                      std::numeric_limits< float >::quiet_NaN() };
+		for( float bad : BAD )
+		{
+			plugin.SetFloatParameter( index, bad );
+			const float readBack = plugin.GetFloatParameter( index );
+			CHECK( readBack >= 0.0f );
+			CHECK( readBack < static_cast< float >( entry.count ) );
+		}
+
+		// And a valid write still lands where it was put, so the clamp has not
+		// simply pinned everything to zero.
+		plugin.SetFloatParameter( index, static_cast< float >( entry.count - 1 ) );
+		CHECK_NEAR( plugin.GetFloatParameter( index ), entry.count - 1, 1e-4 );
+	}
 }
 
 TEST( BothPluginsSurviveHostInstantiation )

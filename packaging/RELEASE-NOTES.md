@@ -11,7 +11,7 @@ Two FFGL plugins that simulate datamoshing in Resolume, over a shared render cor
 
 ## This is a pre-release — read this first
 
-Everything here is verified by an automated test suite: 44 tests running a real
+Everything here is verified by an automated test suite: 57 tests running a real
 headless OpenGL 4.1 context against synthetic footage with known ground truth,
 green on Linux, Windows and macOS.
 
@@ -25,6 +25,48 @@ What has *not* been done is the rest of the pass — the aesthetic sweeps, a
 The tuning defaults have still never been judged against real footage. Treat
 this as something to try and report back on, not something to put in a show
 without rehearsing first.
+
+## What is new in 0.3.0
+
+Three new controls, four fixes, and the version is now visible on an installed
+machine.
+
+**Mask Amount / Mask Invert** — the brightness of the motion input decides where
+the mosh is allowed to stick. In **Mosh Transplant** that is the *other* layer,
+so a layer of scrolling text or a generator becomes a stencil that also drives
+the movement. Alpha comes along free.
+
+**Spread** — damage that creeps outward into blocks that are not moving at all.
+Everything else here decides each pixel from this frame alone; this is the one
+control with a memory of what happened next door. Bring the level down and the
+frontier goes out first, so it retreats the way it came.
+
+**View — Result / Motion / Gate** — ask the plugin what it is thinking. *Motion*
+draws the estimated field, with brightness on the same ruler as Motion
+Threshold. *Gate* draws the decision in four colours: black for no motion, red
+for rejected by the threshold, green for open, cyan where the creep has reached,
+grey where the mask is closing it. If nothing is happening, this answers why in
+one glance.
+
+### Fixes worth knowing about
+
+- The **Corrupt** preset rendered nothing at all, and **Quantise** did nothing on
+  ordinary footage — its dead zone covered everything slower than 3 px/frame at
+  the default block size.
+- The motion gate meant something different at every frame rate.
+- An out-of-range dropdown value — which a composition saved by a *later* build
+  can produce — crashed the plugin.
+
+### Which version am I running?
+
+macOS: Get Info on the bundle. Windows: Properties → Details. Both platforms:
+the end of the effect's description in Resolume, and the `datamosh:` line in
+Resolume's log.
+
+The version is deliberately *not* in the plugin name. `Mosh Transplant` already
+uses all 15 characters FFGL allows, and Resolume addresses an effect by its
+name — a name that changed every release would be a saved composition that
+quietly failed to find its effect after an upgrade.
 
 ## 0.2.0 changes what saved values mean
 

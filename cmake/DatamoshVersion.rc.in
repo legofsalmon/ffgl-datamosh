@@ -1,0 +1,42 @@
+// Windows version resource. Generated from this template by CMake.
+//
+// This exists because an installed Datamosh.dll otherwise carries no version
+// at all: Explorer's Properties -> Details is blank, and there is no way for
+// someone with the plugin installed to tell which build they have. macOS has
+// answered that since 0.1 through CFBundleShortVersionString in the bundle's
+// Info.plist; Windows had nothing.
+//
+// FILEVERSION and PRODUCTVERSION are four comma-separated integers, so the
+// patch fits here even though FFGL's own two version fields cannot hold it.
+
+#include <winver.h>
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION    @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0
+PRODUCTVERSION @PROJECT_VERSION_MAJOR@,@PROJECT_VERSION_MINOR@,@PROJECT_VERSION_PATCH@,0
+FILEFLAGSMASK  VS_FFI_FILEFLAGSMASK
+FILEFLAGS      0
+FILEOS         VOS__WINDOWS32
+FILETYPE       VFT_DLL
+FILESUBTYPE    VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        // 040904E4 = US English, Windows Multilingual (CP-1252).
+        BLOCK "040904E4"
+        BEGIN
+            VALUE "CompanyName",      "ffgl-datamosh"
+            VALUE "FileDescription",  "@DATAMOSH_RC_DESCRIPTION@"
+            VALUE "FileVersion",      "@PROJECT_VERSION@"
+            VALUE "InternalName",     "@DATAMOSH_RC_TARGET@"
+            VALUE "LegalCopyright",   "MIT licence"
+            VALUE "OriginalFilename", "@DATAMOSH_RC_TARGET@.dll"
+            VALUE "ProductName",      "Datamosh for Resolume"
+            VALUE "ProductVersion",   "@PROJECT_VERSION@"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1252
+    END
+END
