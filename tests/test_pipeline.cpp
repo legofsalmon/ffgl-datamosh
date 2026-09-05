@@ -1119,6 +1119,77 @@ TEST( DamageSpreadsIntoBlocksThatNeverMoved )
 	CHECK( high > mid );
 }
 
+TEST( SpreadReachesFurtherAcrossItsWholeTravel )
+{
+	// The reach that matters is where the field is still strong enough to open
+	// the gate, and that is LINEAR in the propagation speed while the slider is
+	// logarithmic in it. Shipped in 0.3.0, that put the entire usable creep in
+	// the top of the travel — at 16:9 and Block Size 16, Spread 0.25 reached 0
+	// blocks past the seed, 0.50 reached 1, 0.75 reached 2, and only 1.00 did
+	// anything at 5. Three quarters of the fader was inert.
+	//
+	// That is the fault 0.2.0 was named for removing, reintroduced in a control
+	// added after it. No test caught it because every existing one asked "does
+	// Spread do something" at a single setting, and at the top of the range it
+	// always did.
+	constexpr int W = 640, H = 360;
+
+	auto reachBlocks = []( float spread ) {
+		Rig rig;
+		if( !rig.Setup( W, H ) )
+			return -1;
+
+		MoshParams params      = RawEstimatorParams();
+		params.moshAmount      = 0.8f;
+		params.motionThreshold = 0.0f;
+		params.motionSmoothing = 0.3f;
+		params.spread          = spread;
+
+		// A full second, so the field reaches its settled extent rather than
+		// wherever it happened to have got to.
+		for( int frame = 0; frame < 60; ++frame )
+		{
+			rig.texture.Upload( MakeMovingBandPattern( W, H, frame * 3.0f, 0.0f, 0.25f, 0.0f ) );
+			params.frame = frame;
+			rig.pipeline.Advance( rig.Inputs(), params );
+		}
+
+		const RenderTarget&        field = rig.pipeline.GetDamageField();
+		const int                  fw    = field.GetWidth();
+		const int                  fh    = field.GetHeight();
+		const std::vector< float > data  = ReadTarget( field );
+
+		// Furthest block whose damage still opens the gate substantially —
+		// the same 0.35 MoshDamageOpening reaches full on.
+		int furthest = 0;
+		for( int y = 0; y < fh; ++y )
+			for( int x = 0; x < fw; ++x )
+				if( data[ ( static_cast< size_t >( y ) * fw + x ) * 4 ] > 0.35f && x > furthest )
+					furthest = x;
+
+		rig.Teardown();
+		// Past the seeding band, which ends a quarter of the way across.
+		return furthest - static_cast< int >( fw * 0.25f );
+	};
+
+	const int quarter = reachBlocks( 0.25f );
+	const int half    = reachBlocks( 0.50f );
+	const int threeQ  = reachBlocks( 0.75f );
+	const int full    = reachBlocks( 1.00f );
+
+	// Every quarter turn must buy meaningfully more reach than the last. A
+	// control whose travel is monotone but flat until the end is the thing this
+	// test exists to reject, so these are gaps, not just ordering.
+	CHECK( quarter >= 1 );
+	CHECK( half >= quarter + 2 );
+	CHECK( threeQ >= half + 4 );
+	CHECK( full >= threeQ + 8 );
+
+	// And the top reaches a serious fraction of the frame, or "spread" is a
+	// halo rather than a spread. Measured 22 blocks of 40, 55% of the width.
+	CHECK( full > 15 );
+}
+
 TEST( DamageCreepIsIndependentOfFrameRate )
 {
 	// The trap this feature has, and the reason the spread is a dilation rather

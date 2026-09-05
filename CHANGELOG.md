@@ -8,6 +8,29 @@ Notable changes to ffgl-datamosh. Format follows
 
 ### Fixed
 
+- **Three quarters of `Spread`'s travel did nothing.** The reach that matters —
+  where the field is still strong enough to open the gate — is *linear* in the
+  propagation speed, while the slider is *logarithmic* in it, and the half-life
+  multiplying the whole thing was too short. Measured at 16:9 and Block Size 16,
+  as blocks of creep past the seed:
+
+  ```
+                 shipped 0.3.0     now
+  Spread 0.25    0 blocks   0%     2 blocks   5%
+  Spread 0.50    1 block    2%     5 blocks  12%
+  Spread 0.75    2 blocks   5%    11 blocks  28%
+  Spread 1.00    5 blocks  12%    22 blocks  55%
+  ```
+
+  This is the fault 0.2.0 was named for removing, reintroduced in a control
+  added after it. Nothing caught it because every existing test asked "does
+  Spread do something" at a single setting, and at the top of the range it
+  always did. `SpreadReachesFurtherAcrossItsWholeTravel` now requires each
+  quarter turn to buy meaningfully more reach than the last, which the shipped
+  constants fail.
+
+  Reported from a live Resolume as "I can't see the spread changing much".
+
 - **The panel showed two `Damage` sections and two `Output` sections.** Resolume
   merges parameters into one collapsible section only when they are
   *consecutive*, so `Spread` filed under `Damage` and `View` under `Output` —
