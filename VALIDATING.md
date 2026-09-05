@@ -161,6 +161,22 @@ Launch Resolume, open the **Effects** panel, search "Datamosh".
 clear the field and scroll the whole list; third-party FFGL effects may appear
 under their own group heading. Genuinely absent → **triage F1**, and stop.
 
+**Confirm it is the build you think it is**, before believing anything below. A
+stale copy left in a second plugin folder looks identical to a fresh install,
+and everything after this would then be measuring the wrong binary.
+
+From 0.3.0 the version is on the end of the effect's description, which Resolume
+does surface — confirmed on a live host. The quickest objective read is:
+
+```sh
+curl -sS http://localhost:8080/api/v1/effects | grep -i -A3 -B3 datamosh
+```
+
+Expect `v0.3.0` (or later) in the output. **No version at all means a pre-0.3.0
+binary is loaded** — find and remove the other copy before continuing. Failing
+that, Get Info on the bundle (macOS) or Properties → Details on the DLL
+(Windows) reads the same number from the file itself.
+
 *Note but do not gate on:* a plain grey placeholder instead of a magenta/cyan
 block-displaced thumbnail. That means thumbnails weren't requested, or 160×120
 was rejected. Minor. While the browser is open, scroll the effects list hard —
