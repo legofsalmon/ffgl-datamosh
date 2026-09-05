@@ -39,14 +39,33 @@ uniform bool  HasHistory;       // false on the first frame and after a reset
 // Amount, Motion Smoothing and Decay. Expressed in frame heights rather than
 // pixels or blocks so that changing Block Size or the composition resolution
 // does not change how fast the damage visibly travels.
-const float SPREAD_MIN_HEIGHTS = 0.15;  // ~7s to cross the frame: a crawl
-const float SPREAD_MAX_HEIGHTS = 1.5;   // ~0.7s to cross: the gesture
+// Measured, not guessed. The reach that matters is where the field is still
+// strong enough to open the gate — 1.51 * SPREAD_HALF_LIFE * speed — so reach
+// is LINEAR in speed while the slider is logarithmic in it. The first range
+// tried here, 0.15 to 1.5 heights/second against a 0.15s half-life, put the
+// whole usable creep in the top of the travel:
+//
+//   Spread 0.25 -> 0 blocks   0.50 -> 1 block   0.75 -> 2   1.00 -> 5
+//
+// which is the fault 0.2.0 existed to remove, reintroduced in a new control.
+// Widening the ratio and lengthening the half-life below spreads it out:
+//
+//   Spread 0.25 -> 4 blocks   0.50 -> 8         0.75 -> 16  1.00 -> 31
+//
+// as a fraction of frame width at 16:9 and Block Size 16: 10%, 20%, 39%, 77%.
+const float SPREAD_MIN_HEIGHTS = 0.12;  // a halo a couple of blocks deep
+const float SPREAD_MAX_HEIGHTS = 1.8;   // most of the frame
 
 // How long damage survives once nothing is re-seeding it. Fixed rather than
 // exposed: with the speed above it sets the reach, so one control governs both
 // how fast the creep travels and how far it gets, which is what makes it one
 // gesture rather than two knobs that have to agree.
-const float SPREAD_HALF_LIFE = 0.15;
+//
+// 0.15s was too short to reach anywhere before the field faded — it is the
+// multiplier on the whole reach, so it was throttling every Spread setting at
+// once. Half a second still retreats promptly when the level comes down, which
+// is the other half of what this constant controls.
+const float SPREAD_HALF_LIFE = 0.5;
 
 // Fades the seed in over the bottom of the travel, so leaving Spread at 0 is an
 // exact bypass without the first touch of the fader being a step. Same device
@@ -62,8 +81,8 @@ const float SPREAD_FLOOR = 0.002;
 // taps stop overlapping and the dilation starts leaving holes. The cost is that
 // at a very fine Block Size on a very large frame the top of Spread saturates
 // and runs slower than nominal — at 1080p, Block Size 4, Spread 1.0 and 60fps
-// it wants 6.75 texels against the 4 allowed, so about 40% slow. At the default
-// Block Size 16 it wants 1.69 and the cap is never near. The alternative is a
+// it wants 8.1 texels against the 4 allowed, so about half speed. At the
+// default Block Size 16 it wants 2.0 and the cap is never near. The alternative is a
 // variable iteration count, which makes the pass most expensive exactly when
 // the machine is already dropping frames.
 const float MAX_STEP_TEXELS = 4.0;

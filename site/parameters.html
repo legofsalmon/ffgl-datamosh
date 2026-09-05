@@ -430,7 +430,8 @@
 							came. The scale is a speed in frame heights per second, so it
 							travels at the same rate whatever the resolution, block size or
 							frame rate &mdash; and the same control sets how far it gets, since
-							the front dies where the damage fades.
+							the front dies where the damage fades. Roughly 5% of the frame
+							width at 0.25, 12% at 0.5, 28% at 0.75 and 55% at full.
 						</td>
 					</tr>
 				</tbody>
@@ -612,6 +613,26 @@
 				each rather than joining the first. Their own names are the fix, and for
 				View arguably the better label anyway &mdash; it is a diagnostic, not an
 				output setting.
+			</div>
+
+			<div class="note warn">
+				<span class="note-label">Spread needs somewhere still to creep into</span>
+				It <em>adds</em> to the motion gate rather than replacing it, so it can
+				only open the gate where the gate is shut &mdash; which means it shows up
+				in the parts of the frame that are <strong>not</strong> moving. On footage
+				where everything moves at once, a whipping camera pan or a busy full-frame
+				clip, the gate is already open everywhere and Spread has nothing to add.
+				It is not broken; there is nowhere for it to go.
+				<br><br>
+				It also needs the still region to be <em>changing</em> in some other way
+				&mdash; brightening, cutting, flickering &mdash; because holding a pixel
+				and refreshing it look identical when the pixel never changes. The setup
+				it is built for is a subject moving against a background that is still but
+				not frozen.
+				<br><br>
+				Quickest way to tell: set <strong>View</strong> to <em>Gate</em>. The creep
+				draws in cyan. If cyan is spreading there but the picture looks unchanged,
+				the field is working and the footage has nothing for it to hold.
 			</div>
 
 			<div class="note accent">
