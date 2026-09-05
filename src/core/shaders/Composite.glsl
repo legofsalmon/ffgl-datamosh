@@ -1,6 +1,9 @@
-#version 410 core
-
 // Final pass into the host's framebuffer.
+//
+// No #version line: MoshCommon.glsl is prepended to this source at compile time
+// and carries it, along with the field sampling and the gate. Nothing here calls
+// them yet; they are shared so that the diagnostic views this pass will grow
+// cannot draw a decision the mosh pass did not take.
 //
 // Kept separate from the mosh pass so the accumulation buffer stays in straight
 // alpha and unclamped: it is fed back into itself, and premultiplying or

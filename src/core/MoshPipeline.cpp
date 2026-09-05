@@ -11,6 +11,7 @@
 #include "Ingest.glsl.h"
 #include "Luma.glsl.h"
 #include "Mosh.glsl.h"
+#include "MoshCommon.glsl.h"
 #include "Passthrough.glsl.h"
 #include "SceneDiff.glsl.h"
 #include "ScreenQuad.glsl.h"
@@ -73,9 +74,9 @@ private:
 	int count = 0;
 };
 
-bool CompileOne( ffglex::FFGLShader& shader, const char* fragmentSource, const char* name )
+bool CompileOne( ffglex::FFGLShader& shader, const std::string& fragmentSource, const char* name )
 {
-	if( shader.Compile( shaders::ScreenQuad, fragmentSource ) )
+	if( shader.Compile( std::string( shaders::ScreenQuad ), fragmentSource ) )
 		return true;
 	FFGLLog::LogToHost( ( std::string( "datamosh: failed to compile shader " ) + name ).c_str() );
 	return false;
@@ -118,14 +119,19 @@ bool MoshPipeline::Initialise()
 
 bool MoshPipeline::CompileShaders()
 {
+	// Mosh and Composite share the gate arithmetic, so they share its source
+	// rather than each keeping a copy. MoshCommon.glsl carries the #version line
+	// for both; see the comment at the top of it for why.
+	const std::string common( shaders::MoshCommon );
+
 	return CompileOne( ingestShader, shaders::Ingest, "Ingest" ) &&
 	       CompileOne( lumaShader, shaders::Luma, "Luma" ) &&
 	       CompileOne( sceneDiffShader, shaders::SceneDiff, "SceneDiff" ) &&
 	       CompileOne( controlShader, shaders::Control, "Control" ) &&
 	       CompileOne( blockMatchShader, shaders::BlockMatch, "BlockMatch" ) &&
 	       CompileOne( flowPostShader, shaders::FlowPost, "FlowPost" ) &&
-	       CompileOne( moshShader, shaders::Mosh, "Mosh" ) &&
-	       CompileOne( compositeShader, shaders::Composite, "Composite" ) &&
+	       CompileOne( moshShader, common + shaders::Mosh, "Mosh" ) &&
+	       CompileOne( compositeShader, common + shaders::Composite, "Composite" ) &&
 	       CompileOne( passthroughShader, shaders::Passthrough, "Passthrough" );
 }
 
@@ -145,6 +151,9 @@ void MoshPipeline::ReleaseTargets()
 	flowHeight      = 0;
 	activeBlockSize = 0;
 	hasHistory      = false;
+	// A resize must not leave a record of a warp on the old geometry behind a
+	// composite of the new one.
+	lastMosh        = MoshRecord{};
 }
 
 void MoshPipeline::Release()
@@ -455,8 +464,9 @@ void MoshPipeline::PassMosh( const MoshParams& params )
 	// turns the rest into a wall. t² puts 0.5 at 2px instead of 4. Endpoints
 	// are unchanged. Then clamped below the pyramid's reach, so no Quality
 	// setting can make the gate unclearable.
-	const float t = params.motionThreshold;
-	moshShader.Set( "ThresholdPixels", std::min( t * t * THRESHOLD_PIXEL_RANGE, maxPixels * 0.75f ) );
+	const float t               = params.motionThreshold;
+	const float thresholdPixels = std::min( t * t * THRESHOLD_PIXEL_RANGE, maxPixels * 0.75f );
+	moshShader.Set( "ThresholdPixels", thresholdPixels );
 	moshShader.Set( "Decay", params.decay );
 	moshShader.Set( "Corruption", params.corruption );
 	moshShader.Set( "BlockRepeat", params.blockRepeat );
@@ -467,6 +477,16 @@ void MoshPipeline::PassMosh( const MoshParams& params )
 	moshShader.Set( "MaxUV", 1.0f, 1.0f );
 
 	quad.Draw();
+
+	// What the warp just used, for any pass that has to redraw this decision.
+	// Recorded rather than re-read, because Composite is not guaranteed to run
+	// in the same call as Advance.
+	lastMosh.softness        = params.softness;
+	lastMosh.corruption      = params.corruption;
+	lastMosh.corruptEpoch    = static_cast< float >( params.corruptEpoch );
+	lastMosh.thresholdPixels = thresholdPixels;
+	lastMosh.decay           = params.decay;
+	lastMosh.hasHistory      = hasHistory;
 
 	fboBinding.EndScope();
 	accum.Swap();

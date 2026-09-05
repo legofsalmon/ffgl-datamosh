@@ -151,6 +151,32 @@ private:
 	/// that no pixel can ever clear is a bypass indistinguishable from a dead
 	/// plugin.
 	float maxPixels = 8.0f;
+
+	/// Exactly what PassMosh last used, so that a pass which has to redraw the
+	/// warp's decision redraws the decision that was taken rather than a
+	/// plausible re-derivation of it.
+	///
+	/// Composite is called with this frame's parameters, but not always after
+	/// this frame's Advance: the plugin's frame gate skips Advance when host
+	/// time has not moved and composites anyway. Reading `params` in Composite
+	/// would then draw a gate computed from a DeltaTime no mosh pass ever used,
+	/// and from a Motion Lag the operator may have moved between the two calls.
+	/// Recording instead of re-reading makes that class of divergence
+	/// impossible.
+	///
+	/// Nothing reads it yet. It lands with the shared shader source because the
+	/// two arrive for the same reason, and because a record populated one
+	/// release before its first reader is a record whose staleness has already
+	/// been exercised by every test in the suite.
+	struct MoshRecord
+	{
+		float softness        = 0.0f;
+		float corruption      = 0.0f;
+		float corruptEpoch    = 0.0f;
+		float thresholdPixels = 0.0f;
+		float decay           = 0.0f;
+		bool  hasHistory      = false;
+	} lastMosh;
 };
 
 }  // namespace datamosh
