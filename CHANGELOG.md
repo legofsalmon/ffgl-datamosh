@@ -59,6 +59,11 @@ Notable changes to ffgl-datamosh. Format follows
 
 ### Added
 
+- `GateIsIndependentOfFrameRate` — the same wall-clock interval delivered as
+  four steps or as eight must leave the same picture, measured at a part-open
+  gate. `DecayIsIndependentOfFrameRate` could not have caught this: it runs at
+  Motion Threshold 0 on 3 px/frame motion, where the gate is exactly 1 and the
+  normalisation is the identity.
 - `QuantiseDoesNotSilenceSlowMotion` — every Quantise setting must still visibly
   depart from passthrough at 1.5 px/frame. `EveryStylePresetChangesTheImage`
   moved from 3 px/frame to the same 1.5, because at 3 it passed on the exact
@@ -71,6 +76,31 @@ Notable changes to ffgl-datamosh. Format follows
   default would have passed all five presets while two of them rendered nothing.
 - `ResetReseedsAFrozenVectorField`, and `MeanInteriorDifference` moves into the
   shared harness so both test files ask the question the same way.
+
+- **The motion gate meant something different at every frame rate.** It is a
+  spatial term multiplied into `persistence`, and `persistence` is not an
+  output weight: the mosh pass writes its result into the accumulation buffer
+  and reads it back the next frame, so it is the pole of a feedback loop and a
+  raw multiplier on it is a *rate*. Mosh Amount and Decay are built as
+  `exp2(-dt/T)` for exactly that reason; the gate was a plain multiply, so
+  survival over a wall-clock interval was `gate⁴` where the same interval at
+  double the frame rate gave `gate⁸`.
+
+  This is the class of bug 0.2.0 existed to remove, still present in the one
+  term nobody looked at — a raw multiply is invisible standing between two that
+  look just like it. It survived because the gate is a `smoothstep` over half a
+  pixel of motion, so intermediate values are genuinely hard to reach: the
+  error was real everywhere and visible almost nowhere. Measured at a
+  part-open gate, 30 fps against 60 differed by **0.108**; normalised, by
+  **0.0005**.
+
+  The spatial terms are now collapsed into one value normalised once, in
+  `MoshCommon.glsl`. Endpoints are exact and at 60 fps the exponent is 1, so
+  this is the identity there and changes nothing already measured. It lands
+  before the features that need it because anything with a gradient across the
+  frame — unlike a hairline smoothstep — would have shown this immediately, and
+  three separate normalisations with three separate comments is how divergence
+  starts.
 
 ### Changed
 

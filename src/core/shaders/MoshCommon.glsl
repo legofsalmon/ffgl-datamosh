@@ -104,6 +104,37 @@ float MoshGate( float motionPixels, float thresholdPixels )
 	return smoothstep( thresholdPixels, thresholdPixels + 0.5, motionPixels );
 }
 
+/// The frame step every spatial persistence term is defined against.
+const float MOSH_REF_STEP = 1.0 / 60.0;
+
+/// Normalise a spatial persistence term to that reference step.
+///
+/// `persistence` is not an output weight. The mosh pass writes its result into
+/// the accumulation buffer, which is next frame's `AccumPrev`, so persistence
+/// is the pole of a one-pole IIR and any raw multiplier on it is a RATE.
+/// `MoshHold` and `MoshRetention` are built as exp2(-dt/T) precisely so that
+/// applying them f times a second cancels dt. A raw spatial factor does not
+/// cancel: survival over a wall-clock second is spatial^f, so a gate of 0.5 is
+/// 0.5^30 at 30fps and 0.5^60 at 60 — two very different pictures from one
+/// slider position. That is the class of bug 0.2.0 existed to remove, and the
+/// gate was the one term still carrying it, because a raw multiply is
+/// invisible next to two that look just like it.
+///
+/// Raising it to dt/ref fixes the units. Endpoints are exact, and at 60fps the
+/// exponent is 1 and this is the identity — which is why it changes nothing
+/// already measured. The saving grace until now was that smoothstep over half
+/// a pixel of motion is a hairline: intermediate gate values are rare, so the
+/// error was real but hard to see. Anything with a gradient across it would
+/// not be so lucky, which is why this lands before the terms that have one.
+float MoshNormaliseSpatial( float spatial, float deltaTime )
+{
+	if( spatial >= 0.999 )
+		return 1.0;
+	if( spatial <= 0.0 )
+		return 0.0;
+	return pow( spatial, deltaTime / MOSH_REF_STEP );
+}
+
 /// Mosh Amount as a hold TIME on a log scale, not a per-frame retention
 /// fraction. A raw fraction decays geometrically, so a linear slider spent most
 /// of its travel inside the first few frames of hold and crushed the entire

@@ -1020,6 +1020,75 @@ TEST( FullMoshAmountMasksTheBurstControls )
 	CHECK( levelAfter( 0.0f, true ) - levelAfter( 0.0f, false ) > 0.9f );
 }
 
+TEST( GateIsIndependentOfFrameRate )
+{
+	// The gate is a spatial term multiplied into `persistence`, and persistence
+	// is the pole of a feedback loop rather than an output weight: the mosh
+	// pass writes into the accumulation buffer, and next frame reads it back as
+	// AccumPrev. So a raw multiplier there is a RATE. Mosh Amount and Decay are
+	// built as exp2(-dt/T) so that applying them f times a second cancels dt;
+	// the gate was a plain multiply, so survival over a wall-clock interval was
+	// gate^4 against gate^8 for the same interval at half the frame rate.
+	//
+	// Same shape as DecayIsIndependentOfFrameRate, and for the same reason.
+	// Mosh Amount 1.0 and Decay 0 pin both time curves at exactly 1, so the
+	// gate is the only thing left varying between the two runs.
+	const auto meanAfterAnInterval = []( int stepsPerSecond, int steps ) {
+		Rig rig;
+		if( !rig.Setup( FRAME_WIDTH, FRAME_HEIGHT ) )
+			return -1.0f;
+
+		MoshParams params = RawEstimatorParams();
+		params.moshAmount = 1.0f;
+		params.decay      = 0.0f;
+		// Identity warp, so both runs displace by the same nothing.
+		params.motionGain = 0.0f;
+		params.softness   = 1.0f;
+		// Just under the ~3px/frame the warm-up builds, so smoothstep lands
+		// part-open rather than hard against either stop. The window either
+		// side of this is narrow: the gate is a smoothstep over half a pixel of
+		// motion, so intermediate values are genuinely hard to reach — which is
+		// exactly why this bug survived the release that was named for fixing
+		// units. It was real everywhere and visible almost nowhere.
+		params.motionThreshold = 0.57f;
+
+		params.motionSmoothing = 0.0f;
+		float shift            = 0.0f;
+		for( int frame = 0; frame < 8; ++frame )
+		{
+			rig.PushShifted( shift, 0.0f, params, frame );
+			shift += 3.0f;
+		}
+
+		// Field frozen, so the gate is fixed per pixel from here and a white
+		// frame bleeds in through it at whatever rate it allows.
+		params.motionSmoothing             = 1.0f;
+		params.deltaTime                   = 1.0f / stepsPerSecond;
+		const std::vector< uint8_t > white = MakeSolid( FRAME_WIDTH, FRAME_HEIGHT, 255, 255, 255 );
+		for( int step = 0; step < steps; ++step )
+			rig.PushImage( white, params, 8 + step );
+
+		const float mean = MeanComponent( ReadTarget( rig.pipeline.GetAccumulation() ), 0 );
+		rig.Teardown();
+		return mean;
+	};
+
+	// The same 0.133s, delivered as four steps or as eight.
+	const float atThirty = meanAfterAnInterval( 30, 4 );
+	const float atSixty  = meanAfterAnInterval( 60, 8 );
+
+	// Both must be partway between the two stops, or this is comparing
+	// saturated results and would hold however wrong the arithmetic was. A
+	// fully held frame measures 0.56 here and a fully refreshed one 0.9995.
+	CHECK( atThirty > 0.62f );
+	CHECK( atThirty < 0.97f );
+	CHECK( atSixty > 0.62f );
+	CHECK( atSixty < 0.97f );
+
+	// Measured 0.0005 apart normalised, and 0.108 apart without it.
+	CHECK_NEAR( atThirty, atSixty, 0.02 );
+}
+
 TEST( QuantiseDoesNotSilenceSlowMotion )
 {
 	// Quantise used to be applied to the stored vector field, upstream of the
