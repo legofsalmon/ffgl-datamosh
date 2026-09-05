@@ -6,7 +6,42 @@ Notable changes to ffgl-datamosh. Format follows
 
 ## [Unreleased]
 
-Nothing yet.
+### Fixed
+
+- **The `Corrupt` preset rendered a pixel-exact passthrough.** `Quantise` was
+  applied *after* the temporal blend in `FlowPost`, so the rounded field became
+  the next frame's blend target, inertia dragged each new estimate most of the
+  way back to it, and the result rounded to the grid point it started on.
+  Starting at zero it stayed at zero forever, which made **any non-zero Quantise
+  inert at the default Motion Smoothing of 0.3** — and Corrupt sets Quantise 0.7.
+  Quantising before the blend puts both operands on the grid, so steady motion
+  holds a grid point instead of collapsing to the origin.
+
+  Found by building a randomiser: a dice that rolls the damage controls has to
+  know which combinations produce nothing, and measuring that turned up a
+  combination the shipped presets already used.
+
+- **A held vector field could never be acquired, and `Reset` could not recover
+  it.** At Motion Smoothing 1.0 the blend discards each new estimate in favour of
+  the previous field. Applied when there is no previous field — a cold start, or
+  the frame after a Reset drops the history — that holds the zero it started
+  with, permanently, with no way back except moving the slider. The inertia is
+  now skipped on any frame with no history, so the frame after a Reset acquires a
+  real field and the hold resumes from that.
+
+  Note this does not change Bloom from a cold start: motion needs two frames to
+  estimate, so a field held before any has played is still empty. That is correct
+  — you cannot hold what does not exist — and the recipes page already says to
+  let movement play first.
+
+### Added
+
+- `EveryStylePresetChangesTheImage` — each shipped preset must visibly depart
+  from the live image. Written because both bugs above were combinations: every
+  control was individually fine, and a per-parameter test with everything else at
+  default would have passed all five presets while two of them rendered nothing.
+- `ResetReseedsAFrozenVectorField`, and `MeanInteriorDifference` moves into the
+  shared harness so both test files ask the question the same way.
 
 ## [0.2.0] — 2026-09-02
 

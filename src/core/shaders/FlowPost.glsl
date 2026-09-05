@@ -83,17 +83,35 @@ void main()
 		float hold = SMOOTH_MIN_SECONDS * pow( SMOOTH_MAX_SECONDS / SMOOTH_MIN_SECONDS, s );
 		inertia    = exp2( -DeltaTime / hold ) * clamp( s / 0.05, 0.0, 1.0 );
 	}
-	conditioned = mix( conditioned, previous, inertia );
-
 	// Coarsen the vector grid. A real encoder cannot afford to describe motion
 	// precisely at low bitrates, and the stepped movement that produces is a
 	// large part of what reads as "compressed" rather than "warped".
+	//
+	// BEFORE the temporal blend, not after. After, the quantiser saw its own
+	// output pulled back toward it: the rounded field becomes next frame's
+	// `previous`, inertia drags the new estimate most of the way back to it,
+	// and the result rounds to the grid point it started on. Starting at zero,
+	// it stayed at zero forever — so any non-zero Quantise at the default
+	// Motion Smoothing of 0.3 was a pixel-exact passthrough, and the shipped
+	// Corrupt preset (Quantise 0.7) rendered nothing at all. Quantising first
+	// means both operands of the blend are already on the grid, so steady
+	// motion holds a grid point instead of collapsing to the origin.
 	if( Quantise > 0.0 )
 	{
 		float stepPixels = mix( 0.5, max( 1.0, BlockPixels * 0.5 ), clamp( Quantise, 0.0, 1.0 ) );
 		vec2  stepUV     = vec2( stepPixels ) / FrameRes;
 		conditioned      = round( conditioned / stepUV ) * stepUV;
 	}
+
+	// No inertia while there is no history to hold. Without this guard a full
+	// hold is unrecoverable rather than merely still: at Smoothing 1.0 the mix
+	// discards the freshly estimated field for `previous`, which on a cold
+	// start is zero — so the field never acquires anything, and because Reset
+	// drops HasHistory it cannot recover either. The Bloom preset, whose whole
+	// trick is the full hold, rendered a pixel-exact passthrough when selected
+	// before any motion had played. Holding what does not exist yet is not a
+	// hold, it is a latch.
+	conditioned = mix( conditioned, previous, HasHistory ? inertia : 0.0 );
 
 	// Hard cap. Without it a bad match near a cut can produce a vector that
 	// samples half a screen away and smears the whole frame in one step.

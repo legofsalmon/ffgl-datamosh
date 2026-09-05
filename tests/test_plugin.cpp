@@ -408,6 +408,146 @@ TEST( AbandoningAStyleKeepsItsValues )
 	CHECK_NEAR( plugin.ReadParams().moshAmount, 0.3, 1e-4 );
 }
 
+
+TEST( EveryStylePresetChangesTheImage )
+{
+	// The regression test for a bug that shipped: the Corrupt preset rendered a
+	// pixel-exact copy of its input. Quantise was applied AFTER the temporal
+	// blend in FlowPost, so the rounded field became the next frame's blend
+	// target, inertia dragged each new estimate back to it, and the result
+	// rounded to the grid point it started on — zero, forever. Any non-zero
+	// Quantise at the default Motion Smoothing was inert, and Corrupt sets
+	// Quantise 0.7.
+	//
+	// Testing each style rather than each parameter is deliberate: the styles
+	// are the shipped combinations, and this failure only appeared when two
+	// controls were combined. A per-parameter test with everything else at
+	// default would have passed.
+	Host host;
+	CHECK( host.Setup( FRAME_WIDTH, FRAME_HEIGHT, 1 ) );
+
+	// Renders a moving pattern through the plugin and returns the accumulation
+	// buffer. Mosh Amount is forced on: styles deliberately never write it.
+	auto renderStyle = [ &host ]( int style, float moshAmount ) {
+		TestableEffect plugin;
+		const FFGLViewportStruct viewport = host.Viewport();
+		if( plugin.InitGL( &viewport ) != FF_SUCCESS )
+			return std::vector< float >();
+
+		float shift = 0.0f;
+		int   frame = 1;
+		auto  push  = [ & ]( int count ) {
+			for( int i = 0; i < count; ++i, ++frame )
+			{
+				host.Fill( 0, shift, 0.0f );
+				shift += 3.0f;
+				plugin.SetTime( frame / 60.0 );
+				ProcessOpenGLStruct pGL = host.Frame();
+				plugin.ProcessOpenGL( &pGL );
+			}
+		};
+
+		// Let a field establish BEFORE selecting the style, which is both how a
+		// VJ uses it and what the docs prescribe. Bloom holds the vector field,
+		// and a field held from a cold start is a field of zeroes — motion needs
+		// two frames to estimate, so there is genuinely nothing there yet. That
+		// is correct behaviour, not a defect, and testing it the other way round
+		// measures the warm-up rather than the preset.
+		push( 8 );
+
+		plugin.SetFloatParameter( plugin.ParamIndex( "Style" ), static_cast< float >( style ) );
+		plugin.SetFloatParameter( plugin.ParamIndex( "Mosh Amount" ), moshAmount );
+		// Threshold out of the way: this test is about whether the style's own
+		// controls do anything, not about what counts as moving.
+		plugin.SetFloatParameter( plugin.ParamIndex( "Motion Threshold" ), 0.0f );
+
+		push( 24 );
+		std::vector< float > out = ReadTarget( plugin.pipeline.GetAccumulation() );
+		plugin.DeInitGL();
+		return out;
+	};
+
+	// Mosh Amount 0 is an exact passthrough, so this is the live image.
+	const std::vector< float > live = renderStyle( static_cast< int >( Style::Default ), 0.0f );
+	CHECK( !live.empty() );
+
+	static const struct { Style style; const char* name; } STYLES[] = {
+		{ Style::Melt, "Melt" }, { Style::Bloom, "Bloom" }, { Style::Drag, "Drag" },
+		{ Style::Liquid, "Liquid" }, { Style::Corrupt, "Corrupt" }, { Style::Default, "Default" },
+	};
+
+	for( const auto& entry : STYLES )
+	{
+		const std::vector< float > moshed =
+			renderStyle( static_cast< int >( entry.style ), 1.0f );
+		CHECK( !moshed.empty() );
+
+		const float departure =
+			MeanInteriorDifference( moshed, live, FRAME_WIDTH, FRAME_HEIGHT, 8 );
+		// 0.02 is well clear of both sides: the measured departures run from
+		// 0.09 (Bloom, whose held field is the gentlest) to 0.14, and the bug
+		// this catches produced exactly 0.0000.
+		if( departure <= 0.02f )
+			std::fprintf( stderr, "  style %s departed by only %f\n", entry.name, departure );
+		CHECK( departure > 0.02f );
+	}
+
+	host.Teardown();
+}
+
+
+TEST( ResetReseedsAFrozenVectorField )
+{
+	// At full Motion Smoothing the field is held rather than re-estimated, so
+	// the blend discards each new estimate for the previous field. If that
+	// applied when there is no previous field, a held field could only ever be
+	// the zero it started as — and Reset, which drops the history, would zero it
+	// permanently rather than recovering it. FlowPost therefore skips the
+	// inertia on any frame with no history, so the frame after a Reset acquires
+	// a real field and the hold resumes from that.
+	Host host;
+	CHECK( host.Setup( FRAME_WIDTH, FRAME_HEIGHT, 1 ) );
+
+	TestableEffect plugin;
+	const FFGLViewportStruct viewport = host.Viewport();
+	CHECK( plugin.InitGL( &viewport ) == FF_SUCCESS );
+
+	float shift = 0.0f;
+	int   frame = 1;
+	auto  push  = [ & ]( int count ) {
+		for( int i = 0; i < count; ++i, ++frame )
+		{
+			host.Fill( 0, shift, 0.0f );
+			shift += 3.0f;
+			plugin.SetTime( frame / 60.0 );
+			ProcessOpenGLStruct pGL = host.Frame();
+			plugin.ProcessOpenGL( &pGL );
+		}
+	};
+
+	// Establish a field, then hold it.
+	push( 8 );
+	plugin.SetFloatParameter( plugin.ParamIndex( "Motion Smoothing" ), 1.0f );
+	push( 4 );
+
+	const std::vector< float > held = ReadTarget( plugin.pipeline.GetFlowField() );
+	CHECK( MeanComponent( held, 0 ) != 0.0f );
+
+	// Reset drops the history. The next frame must acquire rather than zero.
+	plugin.SetFloatParameter( plugin.ParamIndex( "Reset" ), 1.0f );
+	push( 1 );
+	plugin.SetFloatParameter( plugin.ParamIndex( "Reset" ), 0.0f );
+	push( 3 );
+
+	const std::vector< float > reacquired = ReadTarget( plugin.pipeline.GetFlowField() );
+	if( MeanComponent( reacquired, 0 ) == 0.0f )
+		std::fprintf( stderr, "  field is zero after Reset at full smoothing\n" );
+	CHECK( MeanComponent( reacquired, 0 ) != 0.0f );
+
+	plugin.DeInitGL();
+	host.Teardown();
+}
+
 TEST( TriggerSurvivesAGatedCall )
 {
 	Host host;
