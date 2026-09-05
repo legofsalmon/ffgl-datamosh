@@ -110,6 +110,14 @@ plugin's four-character ID (`DMSH`) is surfaced verbatim, so do not assert it.
 If absent, the plugin never loaded, and Resolume's UI shows nothing at all when
 that happens — no notification, no badge, no dialog. Go to triage below.
 
+**This is also the version check.** Confirmed against a live Resolume on
+2026-09-05: the effects list carries the plugin's FFGL *description*, and from
+0.3.0 that description ends with the version, so `v0.3.0` appears in the output
+above. Older builds carry no version anywhere, so its absence means the host has
+loaded a pre-0.3.0 binary — which is worth knowing before anything below is
+believed, since a stale copy in a second plugin folder looks identical to a
+fresh one.
+
 **The mixer will not appear here.** FFGL mixers are blend modes, not effects.
 `GET /composition/layers/1` and read what is under `video.mixer` — read the
 actual JSON rather than assuming a key path; the spec models it as an
