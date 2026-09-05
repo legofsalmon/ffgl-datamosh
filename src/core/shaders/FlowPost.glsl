@@ -16,8 +16,6 @@ uniform vec2  FrameRes;
 uniform float Smoothing;   // 0..1 temporal inertia, a log-scaled hold time
 uniform float DeltaTime;   // seconds since the last advance
 uniform float Softness;    // 0..1 spatial blur of the field
-uniform float Quantise;    // 0..1 coarseness of the vector grid
-uniform float BlockPixels; // macroblock edge, the coarsest sensible grid step
 uniform float MaxPixels;   // hard cap on displacement per frame, in pixels
 uniform bool  HasHistory;  // false on the first frame after a resize
 
@@ -83,26 +81,6 @@ void main()
 		float hold = SMOOTH_MIN_SECONDS * pow( SMOOTH_MAX_SECONDS / SMOOTH_MIN_SECONDS, s );
 		inertia    = exp2( -DeltaTime / hold ) * clamp( s / 0.05, 0.0, 1.0 );
 	}
-	// Coarsen the vector grid. A real encoder cannot afford to describe motion
-	// precisely at low bitrates, and the stepped movement that produces is a
-	// large part of what reads as "compressed" rather than "warped".
-	//
-	// BEFORE the temporal blend, not after. After, the quantiser saw its own
-	// output pulled back toward it: the rounded field becomes next frame's
-	// `previous`, inertia drags the new estimate most of the way back to it,
-	// and the result rounds to the grid point it started on. Starting at zero,
-	// it stayed at zero forever — so any non-zero Quantise at the default
-	// Motion Smoothing of 0.3 was a pixel-exact passthrough, and the shipped
-	// Corrupt preset (Quantise 0.7) rendered nothing at all. Quantising first
-	// means both operands of the blend are already on the grid, so steady
-	// motion holds a grid point instead of collapsing to the origin.
-	if( Quantise > 0.0 )
-	{
-		float stepPixels = mix( 0.5, max( 1.0, BlockPixels * 0.5 ), clamp( Quantise, 0.0, 1.0 ) );
-		vec2  stepUV     = vec2( stepPixels ) / FrameRes;
-		conditioned      = round( conditioned / stepUV ) * stepUV;
-	}
-
 	// No inertia while there is no history to hold. Without this guard a full
 	// hold is unrecoverable rather than merely still: at Smoothing 1.0 the mix
 	// discards the freshly estimated field for `previous`, which on a cold

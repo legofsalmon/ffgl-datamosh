@@ -27,6 +27,8 @@ uniform float Softness;         // 0 hard macroblocks, 1 smooth per-pixel
 uniform float PelSnap;          // 0..1 snap the warp to whole pixels
 uniform float Direction;        // +1 or -1
 uniform float ThresholdPixels;  // motion below this does not mosh
+uniform float Quantise;         // 0..1 coarseness of the displacement grid
+uniform float BlockPixels;      // macroblock edge, the coarsest sensible step
 uniform float Decay;
 uniform float Corruption;
 uniform float BlockRepeat;
@@ -54,9 +56,14 @@ void main()
 
 	vec2 flow = MoshFlowAt( Flow, uv, FlowRes, Softness, Corruption, CorruptEpoch );
 
-	// The gate is measured on the estimated motion, before gain, so turning
-	// Gain up smears harder without also changing what counts as moving.
+	// The gate is measured on the estimated motion, before gain and before the
+	// quantiser, so turning Gain up smears harder and coarsening the grid
+	// stepifies the movement — neither changes what counts as moving.
 	float motionPixels = length( flow * FrameRes );
+
+	// Coarsen the grid only now, so a vector that rounds away cannot take the
+	// gate with it. See MoshQuantise.
+	flow = MoshQuantise( flow, Quantise, BlockPixels, FrameRes );
 
 	vec2 offset = flow * MotionGain * Direction;
 

@@ -370,10 +370,13 @@
 						<td>0 &ndash; 1</td>
 						<td>0</td>
 						<td class="desc">
-							Snaps vectors to a coarse grid, the way a low-bitrate encoder has to.
-							Gives stepped, chunky motion instead of smooth displacement. At full
-							scale the step is half a macroblock, so it interacts strongly with
-							<strong>Block Size</strong>.
+							Snaps the displacement to a coarse grid, the way a low-bitrate encoder
+							has to. Gives stepped, chunky motion instead of smooth displacement. At
+							full scale the step is half a macroblock, so it interacts strongly with
+							<strong>Block Size</strong>. Motion slower than half a step rounds to no
+							displacement at all, which holds the block where it is rather than
+							letting it refresh &mdash; a skipped block, in codec terms. It does not
+							change what <strong>Motion Threshold</strong> counts as moving.
 						</td>
 					</tr>
 					<tr>
@@ -638,6 +641,18 @@
 							threshold, moshing is switched off <em>in that region only</em> —
 							so on slow footage a high threshold can leave most of the frame
 							refreshing normally while a corner smears.
+						</td>
+					</tr>
+					<tr>
+						<td>Motion Gain, locally</td>
+						<td><strong>Quantise</strong> is high and the footage is slow</td>
+						<td class="desc">
+							The grid step reaches half a macroblock &mdash; 8&nbsp;px at the
+							default Block Size, 16 at 32. Motion below half a step rounds to no
+							displacement, so those blocks hold where they are instead of
+							sliding. The effect is still running and still holding pixels; it
+							just is not moving them. Drop <strong>Quantise</strong> or
+							<strong>Block Size</strong> to bring the step under the motion.
 						</td>
 					</tr>
 				</tbody>
