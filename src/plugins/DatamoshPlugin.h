@@ -536,6 +536,36 @@ void DatamoshPlugin< HostBase >::ApplyStyle( int style )
 template< typename HostBase >
 FFResult DatamoshPlugin< HostBase >::SetFloatParameter( unsigned int index, float value )
 {
+	// Clamp an option to its own range BEFORE the SDK sees it.
+	//
+	// ffglqs::ParamOption::SetValue clamps the stored `value` when the index is
+	// out of range and then indexes `options` with the UNCLAMPED index anyway
+	// (FFGLParamOption.cpp:25-35), so an out-of-range write reads past the end
+	// of the vector. Plugin::SetFloatParameter bounds-checks the parameter
+	// index but passes the value straight through, so the host can reach it.
+	//
+	// It is reachable from the case this plugin explicitly supports: a
+	// composition saved by a later build that has more entries in a dropdown —
+	// one more Style, say — restores that index into a build whose list is
+	// shorter. The intended landing place is option 0, which for View is
+	// Result and for the rest is the first entry; that is what this does, and
+	// it is what the SDK was trying to do.
+	//
+	// NaN is handled by the inverted comparison: a NaN fails `>= 0` and lands
+	// on 0 rather than being cast to size_t, which is undefined.
+	if( index < this->params.size() )
+	{
+		const auto option = std::dynamic_pointer_cast< ffglqs::ParamOption >( this->params[ index ] );
+		if( option )
+		{
+			const size_t count = option->options.size();
+			if( count == 0 )
+				return FF_FAIL;
+			if( !( value >= 0.0f ) || value > static_cast< float >( count - 1 ) )
+				value = 0.0f;
+		}
+	}
+
 	const FFResult result = HostBase::SetFloatParameter( index, value );
 
 	// Auto Mode is not style-managed, so this sits above the style logic and

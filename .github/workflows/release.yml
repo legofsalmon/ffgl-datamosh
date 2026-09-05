@@ -81,6 +81,26 @@ jobs:
             if (-not ($exports -match 'plugMain')) { throw "plugMain not exported from $($_.Name)" }
           }
 
+      - name: Verify the DLLs carry the version
+        shell: pwsh
+        run: |
+          # An installed DLL is the only place a Windows user can see which
+          # build they have, and a version resource that silently fails to
+          # compile in leaves Properties -> Details blank — invisible from the
+          # source, which is exactly the class of failure this repo keeps
+          # finding. Assert it on the artifact, not on the intent.
+          $expected = (Select-String -Path CMakeLists.txt -Pattern '^\s*VERSION\s+([0-9]+\.[0-9]+\.[0-9]+)').Matches[0].Groups[1].Value
+          Write-Host "CMakeLists declares $expected"
+          Get-ChildItem build/src/plugins/Release/*.dll | ForEach-Object {
+            $got = $_.VersionInfo.FileVersion
+            Write-Host "== $($_.Name) FileVersion=$got"
+            if (-not $got) { throw "$($_.Name) carries no version resource" }
+            if ($got.Split(',').Count -gt 1) { $got = ($got -replace ',\s*','.') }
+            if (-not $got.StartsWith($expected)) {
+              throw "$($_.Name) reports $got, CMakeLists says $expected"
+            }
+          }
+
       # Both the FFGL SDK and GLEW are BSD-style and require their copyright
       # notice to accompany binary redistribution. Generating the file from the
       # licences actually in the tree keeps it honest if either dependency moves.
@@ -147,6 +167,24 @@ jobs:
             lipo -archs "$binary" | grep -q arm64
             lipo -archs "$binary" | grep -q x86_64
             nm -gU "$binary" | grep -qw _plugMain
+          done
+
+      - name: Verify the bundles carry the version
+        run: |
+          # Same reason as the Windows check. macOS has carried the version in
+          # Info.plist since 0.1, but nothing has ever asserted it agrees with
+          # CMakeLists — and pkgbuild compares the BUNDLE's version, not the
+          # package's, when deciding whether an install is an upgrade. A stale
+          # one here is an upgrade that silently does not happen.
+          expected=$( sed -n 's/^[[:space:]]*VERSION[[:space:]]*\([0-9][0-9.]*\).*/\1/p' CMakeLists.txt | head -1 )
+          echo "CMakeLists declares ${expected}"
+          for bundle in build/src/plugins/*.bundle; do
+            got=$( /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$bundle/Contents/Info.plist" )
+            echo "== $(basename "$bundle") CFBundleShortVersionString=${got}"
+            if [ "$got" != "$expected" ]; then
+              echo "::error::$(basename "$bundle") reports ${got}, CMakeLists says ${expected}"
+              exit 1
+            fi
           done
 
       - name: Stage the archive
@@ -310,8 +348,28 @@ jobs:
             exit 1
           fi
 
+          # The tag and CMakeLists must agree, because they feed different
+          # artifacts and nothing downstream reconciles them: the .pkg takes its
+          # version from this tag, while the bundles inside it take theirs from
+          # PROJECT_VERSION. A tag cut against an unbumped CMakeLists publishes
+          # a package advertising the new version whose payload still claims the
+          # old one — and pkgbuild compares the BUNDLE's version when deciding
+          # whether an install is an upgrade, so the upgrade silently does not
+          # happen. The download is named correctly and installs nothing.
+          declared=$( sed -n 's/^[[:space:]]*VERSION[[:space:]]*\([0-9][0-9.]*\).*/\1/p' CMakeLists.txt | head -1 )
+          # Strip the leading v and any -rc / +build suffix before comparing.
+          bare="${version#v}"
+          bare="${bare%%[-+]*}"
+          if [ "$bare" != "$declared" ]; then
+            echo "::error::tag ${version} does not match CMakeLists VERSION ${declared}."
+            echo "::error::Bump CMakeLists.txt, or tag ${declared}. The .pkg takes its version"
+            echo "::error::from the tag and the bundles take theirs from CMakeLists; if they"
+            echo "::error::disagree the installer reports success and upgrades nothing."
+            exit 1
+          fi
+
           echo "VERSION=${version}" >> "$GITHUB_ENV"
-          echo "releasing ${version}"
+          echo "releasing ${version} (CMakeLists agrees: ${declared})"
 
       - name: Name the archives after the version
         run: |

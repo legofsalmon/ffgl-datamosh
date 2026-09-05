@@ -4,9 +4,35 @@ Notable changes to ffgl-datamosh. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versioning follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.3.0] — 2026-09-05
 
 ### Fixed
+
+- **An out-of-range dropdown value crashed the plugin.**
+  `ffglqs::ParamOption::SetValue` clamps the *stored* value when the index is
+  out of range and then indexes its option vector with the **unclamped** index
+  anyway, and `Plugin::SetFloatParameter` bounds-checks the parameter index but
+  passes the value straight through — so a host writing an out-of-range option
+  reads past the end of the vector. Under AddressSanitizer it is not a benign
+  read but a **SEGV**, inside the `memmove` that copies the option's `name`
+  string out of unallocated memory.
+
+  It is reachable from the case this release explicitly documents as safe: a
+  composition saved by a later build with one more entry in a dropdown — one
+  more Style, say — restored into a build whose list is shorter. `View`'s
+  documented fallback to `Result` was, without this, a crash on open.
+
+  The SDK is a submodule and cannot be patched here, so the clamp happens in
+  `DatamoshPlugin::SetFloatParameter` before the value reaches it. NaN is
+  handled by an inverted comparison, since casting NaN to `size_t` is itself
+  undefined. Covered by `OutOfRangeOptionValuesAreClampedNotIndexed`, which
+  drives every option parameter past its end, one past its end, negative and
+  NaN — and which segfaults under ASan with the clamp removed.
+
+- **Both plugins reported version 0.1 to the host, through every release.**
+  `dwPluginMajorVersion` and `dwPluginMinorVersion` were hardcoded `0, 1` in
+  each `CFFGLPluginInfo` registration while the project moved to 0.2.0. They
+  now come from `PROJECT_VERSION`, so there is no second copy left to go stale.
 
 - **The `Corrupt` preset rendered a pixel-exact passthrough.** `Quantise` was
   applied *after* the temporal blend in `FlowPost`, so the rounded field became
@@ -58,6 +84,36 @@ Notable changes to ffgl-datamosh. Format follows
   latch, so that bug cannot return in another form.
 
 ### Added
+
+- **The version is now visible on an installed machine, on both platforms.**
+  Before this, a user with the plugin installed had no way to tell which build
+  they had: macOS carried it in the bundle's `Info.plist` and Windows carried
+  nothing at all.
+
+  - **Windows** DLLs now carry a `VERSIONINFO` resource, so Properties →
+    Details shows a File version. There was no `.rc` anywhere in the repo.
+  - **macOS** bundles already carried `CFBundleShortVersionString`; CI now
+    asserts it agrees with `CMakeLists.txt`, which nothing checked before.
+  - **In Resolume**, both plugins append the full version to the description
+    they hand the host, and to the `datamosh:` line they log on first
+    allocation.
+  - **Release** now refuses to publish when the tag and `CMakeLists.txt`
+    disagree. They feed different artifacts — the `.pkg` takes its version from
+    the tag, the bundles inside it from `PROJECT_VERSION` — and `pkgbuild`
+    compares the *bundle's* version when deciding whether an install is an
+    upgrade. A tag cut against an unbumped `CMakeLists` published a package
+    named for the new version that silently upgraded nothing.
+
+  **The version deliberately does not go in the plugin name.** `Mosh
+  Transplant` is 15 of the 15 characters `PluginName` allows, so there is no
+  room at all, and every shorter spelling loses the word *Transplant* — the
+  only one that says what the blend mode does. More importantly, Resolume
+  addresses an effect by a name-derived URI, so a name that changed every
+  release risks a saved composition that silently fails to find its effect,
+  with no dialog and no badge. Nor does it go in the filenames: a versioned
+  payload accumulates rather than upgrading, leaving two binaries in one scan
+  folder both claiming `DMSH`, which the project's own diagnostics already
+  call unresolvable.
 
 - **`View` — Result, Motion or Gate.** The plugin can now draw what it is
   thinking rather than only what it is doing, which turns most of "when a knob
@@ -598,7 +654,8 @@ Two defects caught in review before release, both of which fail silently:
   Resolume then silently will not load them; the install notes carry the
   `xattr -dr com.apple.quarantine` fix.
 
-[Unreleased]: https://github.com/legofsalmon/ffgl-datamosh/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/legofsalmon/ffgl-datamosh/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/legofsalmon/ffgl-datamosh/releases/tag/v0.3.0
 [0.2.0]: https://github.com/legofsalmon/ffgl-datamosh/releases/tag/v0.2.0
 [0.1.5]: https://github.com/legofsalmon/ffgl-datamosh/releases/tag/v0.1.5
 [0.1.4]: https://github.com/legofsalmon/ffgl-datamosh/releases/tag/v0.1.4

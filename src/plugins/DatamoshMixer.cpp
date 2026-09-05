@@ -30,11 +30,14 @@ static CFFGLPluginInfo PluginInfo(
 	PluginFactory< datamosh::DatamoshMixer >,
 	"DMMX",               // unique ID, maximum four characters
 	PLUGIN_NAME,
-	2,                    // FFGL API major
-	1,                    // FFGL API minor
-	0,                    // plugin major
-	1,                    // plugin minor
+	2,                        // FFGL API major
+	1,                        // FFGL API minor
+	DATAMOSH_VERSION_MAJOR,   // plugin major
+	DATAMOSH_VERSION_MINOR,   // plugin minor
 	FF_MIXER,
-	"Applies one layer's motion to another layer's pixels",
-	"ffgl-datamosh"
+	// See DatamoshEffect.cpp: the description is unbounded, so it is where the
+	// full version goes. The name above is at 15 of 15 and has nothing to give.
+	"Applies one layer's motion to another layer's pixels"
+	" (v" DATAMOSH_VERSION ")",
+	"ffgl-datamosh " DATAMOSH_VERSION
 );

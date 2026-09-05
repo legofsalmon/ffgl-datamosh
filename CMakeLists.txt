@@ -1,7 +1,7 @@
 cmake_minimum_required( VERSION 3.20 )
 
 project( ffgl-datamosh
-    VERSION 0.2.0
+    VERSION 0.3.0
     DESCRIPTION "Datamosh effects for Resolume"
     LANGUAGES CXX
 )
@@ -40,6 +40,14 @@ if( DATAMOSH_BUILD_TESTS )
 endif()
 
 message( STATUS "" )
+if( WIN32 )
+    # Explicit rather than implicit: the Visual Studio generators enable RC on
+    # their own, but Ninja and MinGW do not, and a silently dropped version
+    # resource is exactly the invisible-from-the-code failure this codebase
+    # keeps finding. Failing at configure time is the loud alternative.
+    enable_language( RC )
+endif()
+
 message( STATUS "ffgl-datamosh ${PROJECT_VERSION}" )
 message( STATUS "  build type   : ${CMAKE_BUILD_TYPE}" )
 if( APPLE )

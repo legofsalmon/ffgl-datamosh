@@ -11,7 +11,7 @@ field. Windows and macOS.
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --parallel
-ctest --test-dir build --output-on-failure     # 44 tests, headless EGL + llvmpipe
+ctest --test-dir build --output-on-failure     # 57 tests, headless EGL + llvmpipe
 ./build/tests/datamosh_tests --profile          # per-pass GPU timing
 ```
 
