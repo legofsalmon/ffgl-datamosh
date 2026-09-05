@@ -597,12 +597,21 @@
 			</div>
 
 			<div class="note">
-				<span class="note-label">Why Spread sits at the bottom of Damage</span>
-				It belongs next to Decay by topic and is filed under Damage, but it was
-				added after the parameters below it existed. Resolume restores a saved
-				composition by parameter position, so slotting it in where it reads best
-				would shift everything after it and reload every older composition with
-				its values one slot out. Position is permanent; tidiness is not.
+				<span class="note-label">Why Spread and View have sections of their own</span>
+				Both belong elsewhere by topic &mdash; Spread beside Decay, View beside
+				Mix and Quality &mdash; but both were added after the parameters below
+				them existed. Resolume restores a saved composition by parameter
+				position, so slotting either in where it reads best would shift
+				everything after it and reload every older composition with its values
+				one slot out.
+				<br><br>
+				They are also not filed under the group names they belong to, which
+				0.3.0 got wrong: Resolume only merges parameters into one section when
+				they are <em>consecutive</em>, so reusing &ldquo;Damage&rdquo; and
+				&ldquo;Output&rdquo; at the end of the list produced a second section of
+				each rather than joining the first. Their own names are the fix, and for
+				View arguably the better label anyway &mdash; it is a diagnostic, not an
+				output setting.
 			</div>
 
 			<div class="note accent">

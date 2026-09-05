@@ -4,6 +4,32 @@ Notable changes to ffgl-datamosh. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versioning follows
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **The panel showed two `Damage` sections and two `Output` sections.** Resolume
+  merges parameters into one collapsible section only when they are
+  *consecutive*, so `Spread` filed under `Damage` and `View` under `Output` —
+  both appended at the end of the list for index stability — rendered a **second**
+  section of each rather than joining the first:
+
+  ```
+  Mosh · Motion · Damage · Sync · Output · Mask · Damage · Output
+  ```
+
+  Found by looking at the panel in Resolume; it is invisible from the code, where
+  each `AddGrouped` call reads perfectly well on its own, and was invisible to
+  every test, because nothing looked at the *sequence* of group names.
+
+  Both now have sections of their own. Appending is not the problem and was not
+  changed — a parameter's index is its identity in a saved composition, so new
+  parameters can only go at the end. The rule is that whatever goes there needs a
+  group name not already used above it, which
+  `NoParameterGroupNameRepeatsNonAdjacently` now enforces for both plugins.
+  `View` arguably reads better this way regardless: it is a diagnostic, not an
+  output setting like Mix or Quality.
+
 ## [0.3.0] — 2026-09-05
 
 ### Fixed

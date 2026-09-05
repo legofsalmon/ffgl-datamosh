@@ -311,18 +311,29 @@ void DatamoshPlugin< HostBase >::DeclareCommonParams()
 	AddGrouped( "Mask", ParamRange::Create( "Mask Amount", 0.0f, Range( 0.0f, 1.0f ) ) );
 	AddGrouped( "Mask", ParamBool::Create( "Mask Invert", false ) );
 
-	// Filed under "Damage" by topic but appended here by necessity, for the
-	// same reason as the mask above: the host restores values by index, so
-	// slotting it next to Decay where it belongs would shift the five
-	// parameters below it and reload every 0.2.0 composition with Audio Amount
-	// in Audio Band's slot. Position is permanent; tidiness is not.
-	AddGrouped( "Damage", ParamRange::Create( "Spread", 0.0f, Range( 0.0f, 1.0f ) ) );
+	// Its own group, not "Damage", even though that is where it belongs by
+	// topic. Groups only collapse when they are CONSECUTIVE, and this is
+	// appended after Output — so reusing the name rendered a SECOND "Damage"
+	// section at the bottom of the panel rather than joining the first.
+	// Confirmed in Resolume: the panel read
+	//   Mosh · Motion · Damage · Sync · Output · Mask · Damage · Output
+	// with the last two duplicating earlier names for exactly this reason.
+	//
+	// A unique name is the whole fix, and it is not a consolation prize: this
+	// is the one control in the plugin with a spatial memory, so a section of
+	// its own is arguably where it should have been anyway.
+	AddGrouped( "Spread", ParamRange::Create( "Spread", 0.0f, Range( 0.0f, 1.0f ) ) );
 
-	// Appended last, for the same reason everything above it was. Not
-	// style-managed: a look is not a way of looking at it, and a preset that
-	// dragged the panel out of a diagnostic — or into one — would be a
+	// Appended last, for the same reason everything above it was, and in its
+	// own group for the same reason as Spread: "Output" already appeared
+	// earlier, and a non-adjacent repeat renders a second section rather than
+	// joining the first. Its own name is also the more honest label — this is
+	// a diagnostic, not an output setting like Mix or Quality.
+	//
+	// Not style-managed: a look is not a way of looking at it, and a preset
+	// that dragged the panel out of a diagnostic — or into one — would be a
 	// surprise either way.
-	AddGrouped( "Output", ParamOption::Create( "View",
+	AddGrouped( "View", ParamOption::Create( "View",
 	                                           { { "Result", 0.0f }, { "Motion", 1.0f }, { "Gate", 2.0f } },
 	                                           0 ) );
 

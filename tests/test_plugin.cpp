@@ -1189,6 +1189,62 @@ TEST( OutOfRangeOptionValuesAreClampedNotIndexed )
 	}
 }
 
+TEST( NoParameterGroupNameRepeatsNonAdjacently )
+{
+	// Resolume collapses consecutive parameters that share a group name into one
+	// collapsible section. A group name that reappears LATER, after a different
+	// group has intervened, does not rejoin the first — it renders a SECOND
+	// section with the same title.
+	//
+	// This shipped in 0.3.0. Spread was filed under "Damage" and View under
+	// "Output", both appended at the end of the list for index stability, and
+	// the panel came out as
+	//
+	//   Mosh · Motion · Damage · Sync · Output · Mask · Damage · Output
+	//
+	// with two duplicated sections at the bottom. It is invisible from the code
+	// — each AddGrouped call reads perfectly well on its own — and invisible to
+	// every existing test, because nothing looked at the sequence of groups.
+	//
+	// Appending is not the problem and must not be "fixed": a parameter's index
+	// is its identity in a saved composition, so new parameters can only go at
+	// the end. The rule is that whatever goes there needs a group name not
+	// already used above it.
+	auto check = []( auto& plugin, const char* which ) {
+		std::vector< std::string > order;
+		for( unsigned int index = 0; index < plugin.GetNumParams(); ++index )
+		{
+			std::string group = plugin.GetParamGroup( index );
+			if( order.empty() || order.back() != group )
+				order.push_back( group );
+		}
+
+		// Each run of a group name must be the only run of it. Comparing
+		// against the collapsed sequence, not the raw per-parameter list, is
+		// what makes this catch a non-adjacent repeat while allowing a group
+		// to span as many consecutive parameters as it likes.
+		for( size_t i = 0; i < order.size(); ++i )
+		{
+			for( size_t j = i + 1; j < order.size(); ++j )
+			{
+				if( order[ i ] == order[ j ] && !order[ i ].empty() )
+				{
+					std::fprintf( stderr, "  %s: group \"%s\" renders twice\n",
+					              which, order[ i ].c_str() );
+					return false;
+				}
+			}
+		}
+		return true;
+	};
+
+	TestableEffect effect;
+	CHECK( check( effect, "effect" ) );
+
+	TestableMixer mixer;
+	CHECK( check( mixer, "mixer" ) );
+}
+
 TEST( BothPluginsSurviveHostInstantiation )
 {
 	// This exists because of a real defect: renaming the mixer's inherited
