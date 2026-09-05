@@ -108,10 +108,16 @@ void main()
 	// The gate stays OUTSIDE the hold map, as a linear multiplier. Folded into
 	// the exponent it would lift a barely-moving pixel to a near-full hold and
 	// erase Motion Threshold.
-	float gate        = MoshGate( motionPixels, ThresholdPixels );
-	float retention   = MoshRetention( Decay, DeltaTime );
-	float keep        = MoshHold( moshLevel, DeltaTime );
-	float persistence = clamp( keep * gate * retention, 0.0, 1.0 );
+	float retention = MoshRetention( Decay, DeltaTime );
+	float keep      = MoshHold( moshLevel, DeltaTime );
+
+	// One spatial term, normalised once. The gate is the only thing in it for
+	// now; anything else that varies across the frame folds in here rather
+	// than inventing its own frame-rate treatment beside it. Three
+	// normalisations with three comments is how divergence starts.
+	float spatial     = MoshGate( motionPixels, ThresholdPixels );
+	float persistence = clamp( keep * retention * MoshNormaliseSpatial( spatial, DeltaTime ),
+	                           0.0, 1.0 );
 
 	vec4 result = mix( live, moshed, persistence );
 
