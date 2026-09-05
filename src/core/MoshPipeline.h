@@ -61,7 +61,7 @@ public:
 
 	/// Draws the current result into the framebuffer and viewport the host has
 	/// bound. Does not modify the viewport.
-	void Composite( GLuint hostFBO, float mix );
+	void Composite( GLuint hostFBO, float mix, DebugView view = DebugView::Result );
 
 	/// Draws the untouched input straight through. Used when the pipeline could
 	/// not run, so a failure degrades to passthrough rather than to black.
@@ -187,6 +187,12 @@ private:
 		float corruptEpoch    = 0.0f;
 		float thresholdPixels = 0.0f;
 		float decay           = 0.0f;
+		/// What full travel of Motion Threshold reaches, in pixels. Recorded
+		/// rather than re-derived because it moves with Quality, and a view
+		/// normalised against a different number than the gate used would draw
+		/// the wrong brightness at Low.
+		float thresholdFullScale = 0.0f;
+		int   motionLag       = 0;
 		float maskAmount      = 0.0f;
 		bool  maskInvert      = false;
 		float spread          = 0.0f;

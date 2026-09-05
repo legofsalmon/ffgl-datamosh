@@ -170,6 +170,30 @@ float MoshHold( float moshLevel, float deltaTime )
 	return exp2( -deltaTime / hold ) * clamp( moshLevel / HOLD_FADE_IN, 0.0, 1.0 );
 }
 
+/// The hold time Mosh Amount asks for, in seconds. The same map MoshHold uses,
+/// without the dt that turns it into a per-frame survival fraction.
+///
+/// A diagnostic view has to draw this rather than MoshHold's output. That output
+/// is a per-frame number: 0.94 at 60fps against 0.883 at 30 for the default Mosh
+/// Amount of 0.3, and saturated above 0.87 for every level past 0.12 — so a
+/// picture of it is both frame-rate dependent and almost entirely white. Seconds
+/// are the thing the operator set, and they are the same at any frame rate.
+float MoshHoldSeconds( float moshLevel )
+{
+	if( moshLevel >= 0.995 )
+		return HOLD_MAX_SECONDS;
+	return HOLD_MIN_SECONDS * pow( HOLD_MAX_SECONDS / HOLD_MIN_SECONDS, moshLevel );
+}
+
+/// Decay's half-life in seconds, or a very long time when Decay is off. Paired
+/// with MoshHoldSeconds for the same reason.
+float MoshDecaySeconds( float decay )
+{
+	if( decay <= 0.0 )
+		return 1e6;
+	return 8.0 * pow( 0.00625, clamp( decay, 0.0, 1.0 ) );
+}
+
 /// Decay expressed as a half-life rather than a per-frame fraction, so the same
 /// setting bleeds the live image back at the same rate whether the host is
 /// running at 30 or 60 or an uneven frame rate. A flat multiplier would decay

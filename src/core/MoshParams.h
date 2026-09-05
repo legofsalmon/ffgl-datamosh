@@ -22,6 +22,15 @@ enum class Quality : int
 };
 
 /// Which input drives motion in the two-input mixer build.
+/// What the composite pass draws. Result is the effect; the others are
+/// diagnostics that replay the decision the warp actually took.
+enum class DebugView : int
+{
+	Result = 0,
+	Motion,
+	Gate
+};
+
 enum class MotionSource : int
 {
 	FromA = 0,  ///< Motion from input A, pixels from input B.
@@ -101,6 +110,10 @@ struct MoshParams
 	/// speed in frame heights per second on a log scale. 0 is off and the field
 	/// stays exactly empty, which is what makes this not a breaking change.
 	float spread         = 0.0f;
+
+	/// What to draw. Result is the effect and is what every existing
+	/// composition gets; the others are diagnostics.
+	DebugView view       = DebugView::Result;
 
 	// --- Mask -------------------------------------------------------------
 	/// 0..1 depth of the luma mask on the persistence gate. The mask comes from

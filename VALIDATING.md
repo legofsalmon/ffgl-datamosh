@@ -252,6 +252,31 @@ If nothing changes at 0.0, the motion field is not reaching the mosh pass.
 Put Motion Gain back to 1.0, then run the second half of the canary: Mosh Amount
 back to 0, clean picture within one frame.
 
+### S6b. Ask the plugin what it thinks (30 seconds, and it explains S6)
+
+Set **View** to **Motion**. The frame should be coloured wherever the clip is
+moving — hue is direction, brightness is speed. Black here while S6 passed means
+the diagnostic is dead, which is worth reporting on its own.
+
+Now set **View** to **Gate**:
+
+| what you see | what it means |
+| --- | --- |
+| black | no motion here — nothing for the gate to decide |
+| red | motion, rejected by **Motion Threshold**. Brighter = closer to clearing it |
+| green | the gate is open |
+| cyan | the gate is shut but **Spread**'s creep has reached here |
+| washed toward grey | the **mask** is closing it |
+| dim overall | gate open, little held — look at **Mosh Amount** and **Decay** |
+
+Neither view recomputes anything: they redraw the decision the last rendered
+frame actually took, so they cannot disagree with the picture. That is the point
+of them, and it is why any later step that looks wrong is worth checking here
+before assuming a parameter is broken.
+
+**Set View back to Result before continuing.** Everything after this is about
+the picture, and a diagnostic left on will fail all of it.
+
 ### S7. Are the parameter values real, or normalised? — **GATE C**
 
 `CFFGLPluginManager::SetParamInfo` clamps `FF_TYPE_STANDARD` defaults to 0..1,
