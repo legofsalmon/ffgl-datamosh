@@ -112,30 +112,6 @@ float MeanVectorDifference( const std::vector< float >& a, const std::vector< fl
 	return count == 0 ? -1.0f : static_cast< float >( total / count );
 }
 
-/// Mean absolute difference over the interior of two full-resolution buffers.
-///
-/// The frame border is excluded because content there was off-screen a frame
-/// ago: no estimator can reconstruct it, and every warp smears it inward.
-float MeanInteriorDifference( const std::vector< float >& a, const std::vector< float >& b,
-                              int width, int height, int margin )
-{
-	if( a.size() != b.size() || a.empty() )
-		return -1.0f;
-	double total = 0.0;
-	int    count = 0;
-	for( int y = margin; y < height - margin; ++y )
-	{
-		for( int x = margin; x < width - margin; ++x )
-		{
-			const size_t index = ( static_cast< size_t >( y ) * width + x ) * 4;
-			for( int channel = 0; channel < 3; ++channel )
-				total += std::fabs( a[ index + channel ] - b[ index + channel ] );
-			count += 3;
-		}
-	}
-	return count == 0 ? -1.0f : static_cast< float >( total / count );
-}
-
 constexpr int FRAME_WIDTH  = 256;
 constexpr int FRAME_HEIGHT = 192;
 

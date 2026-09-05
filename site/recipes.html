@@ -93,8 +93,12 @@ Decay            0.1     &larr; so it recovers instead of collapsing forever</co
 			<div class="note">
 				<span class="note-label">Order matters</span>
 				A full hold keeps whatever field exists <em>at the moment you set it</em>.
-				Push Smoothing to 1 during a still shot and you have frozen a field of
+				Push Smoothing to 1 during a still shot and you have held a field of
 				zeroes, and nothing will happen. Let some movement play first, then hold.
+				<br><br>
+				<strong>Reset</strong> is the way out: it drops the history, so the next
+				frame acquires a real field and the hold resumes from that rather than
+				from nothing.
 			</div>
 
 			<h3>Pixel drag &mdash; trails without collapse</h3>
