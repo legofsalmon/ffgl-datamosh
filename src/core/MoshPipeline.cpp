@@ -139,6 +139,12 @@ bool MoshPipeline::CompileShaders()
 	// The two final passes both draw the licence mark, from one copy of it.
 	const std::string mark( shaders::Watermark );
 
+	// Shader compilation is the likeliest place for a strict driver to fall
+	// over (Apple's GL 4.1 compiler, see VALIDATING.md S4), so it is its own
+	// breadcrumb stage.
+	if( breadcrumb )
+		breadcrumb->Stage( "compile-shaders" );
+
 	return CompileOne( ingestShader, shaders::Ingest, "Ingest" ) &&
 	       CompileOne( lumaShader, shaders::Luma, "Luma" ) &&
 	       CompileOne( sceneDiffShader, shaders::SceneDiff, "SceneDiff" ) &&
@@ -230,6 +236,8 @@ bool MoshPipeline::EnsureResources( GLsizei width, GLsizei height, int blockSize
 
 	// Everything downstream assumed the old geometry, so none of it is valid.
 	// Allocate() releases first, so this doubles as the resize path.
+	if( breadcrumb )
+		breadcrumb->Stage( "allocate" );
 	const bool ok =
 		colourTarget.Allocate( width, height, GL_RGBA16F ) &&
 		// Mips on luma are the search pyramid: coarse levels resolve large
@@ -746,6 +754,8 @@ void MoshPipeline::Passthrough( GLuint hostFBO, const FrameInputs& inputs, Water
 {
 	if( inputs.pixelTexture == 0 || !passthroughShader.IsReady() )
 		return;
+	if( breadcrumb )
+		breadcrumb->Stage( "passthrough" );
 
 	glBindFramebuffer( GL_FRAMEBUFFER, hostFBO );
 

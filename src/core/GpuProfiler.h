@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Breadcrumb.h"
 #include "GL.h"
 
 #include <array>
@@ -50,8 +51,13 @@ public:
 
 	bool IsEnabled() const { return enabled; }
 
-	/// Starts timing a pass. Ends any pass still open.
+	/// Starts timing a pass. Ends any pass still open. Also records the pass
+	/// in the crash breadcrumb, whether or not timing is on: every pass
+	/// already opens one of these, so it is the one place that sees them all.
 	void Begin( Pass pass );
+
+	/// Where Begin records the pass it is entering. May be null.
+	void SetBreadcrumb( Breadcrumb* target ) { breadcrumb = target; }
 	/// Ends the currently open pass, if any.
 	void End();
 
@@ -78,6 +84,7 @@ private:
 	std::array< Slot, RING_LENGTH >       ring{};
 	std::array< float, PASS_COUNT >       results{};
 	int                                   openPass = -1;
+	Breadcrumb*                           breadcrumb = nullptr;
 };
 
 /// Times a pass for the duration of a scope.

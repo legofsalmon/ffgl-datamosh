@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Breadcrumb.h"
 #include "GL.h"
 #include "GpuProfiler.h"
 #include "MoshParams.h"
@@ -74,6 +75,15 @@ public:
 
 	/// Forces the next Advance to treat itself as a keyframe.
 	void Invalidate() { hasHistory = false; }
+
+	/// Where each pass is recorded as it starts, so a crash mid-frame can be
+	/// traced to the pass it happened in on the next load. Not owned; may be
+	/// null, which is what the tests use.
+	void SetBreadcrumb( Breadcrumb* target )
+	{
+		breadcrumb = target;
+		profiler.SetBreadcrumb( target );
+	}
 
 	/// Turns on per-pass GPU timing. Off by default and free when off.
 	bool EnableProfiling() { return profiler.Enable(); }
@@ -163,6 +173,7 @@ private:
 	PingPong     state;         ///< 1x1 control state
 
 	GpuProfiler  profiler;
+	Breadcrumb*  breadcrumb = nullptr;
 
 	GLsizei frameWidth      = 0;
 	GLsizei frameHeight     = 0;
