@@ -35,8 +35,31 @@ every saved composition still finds both plugins.
   nothing waits on the network at startup or on a frame, and being offline never
   restricts anything.
 
+- **Send Feedback.** A button in a new **Help** section, just above Licence on
+  both plugins, opens `letissier.ie/feedback` in the browser with the product
+  and version filled in. Typing `feedback` into the Licence field does the same.
+  Presses in the first three seconds of an instance's life (a composition
+  loading) are ignored.
+- **Crash reports, off unless you turn them on.** If Resolume dies while
+  Datamosh is inside one of its calls, the next launch knows, from a small
+  memory-mapped marker in the licence folder, and which pass it was in; an
+  error the plugin caught and survived is noted too. The Licence field's name
+  then asks once: type `send` or `discard`. `always send` turns automatic
+  reports on and `reports off` turns them off and clears the queue. Reports are
+  scrubbed of home folders and user names before they are saved, carry a
+  random install id and nothing about the person, queue at most 20, and go from
+  the background thread with an 8-second timeout. No signal handlers, no stack
+  traces: a plugin must not replace its host's crash handling.
+- **`LETISSIER_API`** in the environment points the licence and report calls at
+  a test deployment. Tokens are still verified against the built-in key.
+
 ### Changed
 
+- **An error inside the plugin no longer reaches Resolume.** Every FFGL entry
+  point catches anything thrown, passes the frame through, logs `datamosh: error
+  in ...` (throttled) and counts it. A constructor that throws is a failed
+  instance, not an exception in the host. Before, one uncaught C++ exception on
+  a frame would have taken Resolume down with it.
 - **Release builds are locked without a licence or trial** ("trial, then lock").
   A new instance with neither passes its input through untouched. Because that
   is what a dead plugin looks like too, a locked instance names itself — the
@@ -53,6 +76,10 @@ every saved composition still finds both plugins.
 
 ### Fixed
 
+- **A render-target allocation that failed was retried on every frame.** A
+  frame size the GPU cannot allocate (too large, or out of memory) now passes
+  through, logs once for that size, and tries again after 120 frames rather
+  than stalling every frame on a doomed allocation.
 - **The panel showed two `Damage` sections and two `Output` sections.** Resolume
   merges parameters into one collapsible section only when they are
   *consecutive*, so `Spread` filed under `Damage` and `View` under `Output` —

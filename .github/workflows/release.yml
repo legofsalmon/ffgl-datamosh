@@ -270,6 +270,14 @@ jobs:
 
           mkdir -p pkg-payload
           cp -R build/src/plugins/*.bundle pkg-payload/
+          # The installer lays down only the bundles, so the notices the FFGL
+          # SDK's and Monocypher's licences require with a binary go inside
+          # each one, before signing seals its resources.
+          for bundle in pkg-payload/*.bundle; do
+            mkdir -p "$bundle/Contents/Resources"
+            cp staging/THIRD-PARTY.txt "$bundle/Contents/Resources/THIRD-PARTY.txt"
+            cp LICENSE "$bundle/Contents/Resources/LICENSE.txt"
+          done
           bash packaging/macos/build-pkg.sh pkg-payload "$version" datamosh-macos.pkg
 
       # Signing is optional; a package that would install the quarantine flag it
@@ -295,6 +303,13 @@ jobs:
           for expected in Datamosh.bundle DatamoshTransplant.bundle; do
             find expanded -name "$expected" -maxdepth 4 | grep -q . || {
               echo "::error::$expected missing from the package payload"; exit 1; }
+          done
+
+          # And each carries the third-party notices, since nothing else
+          # installed alongside them does.
+          for expected in Datamosh.bundle DatamoshTransplant.bundle; do
+            find expanded -path "*/$expected/Contents/Resources/THIRD-PARTY.txt" | grep -q . || {
+              echo "::error::$expected in the package has no THIRD-PARTY.txt"; exit 1; }
           done
 
           # The whole point. Anything quarantined in the payload is restored on

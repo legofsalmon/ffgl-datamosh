@@ -75,7 +75,7 @@ Install straight into Resolume with
 ## Test
 
 ```sh
-ctest --test-dir build --output-on-failure   # 88 tests
+ctest --test-dir build --output-on-failure   # 107 tests
 ./build/tests/datamosh_tests --profile        # per-pass GPU timing
 ```
 
@@ -166,6 +166,9 @@ Transplant — they share one licence — and Enter:
 | `check` | Checks in with the service now |
 | `deactivate` | Releases this computer's seat (and forgets the licence locally, even offline) |
 | a token (`eyJ...`) | Offline activation: the token from the account page for this computer's request code |
+| `feedback` | Opens the feedback page in the browser (as does the **Send Feedback** button) |
+| `send` / `discard` | Answers the crash-report question (below) |
+| `always send` / `reports off` | Turns automatic crash reports on or off |
 
 The field empties on Enter and never shows what was typed, so a key, an email or
 a token is never saved into a composition. Its **name** shows the result:
@@ -210,6 +213,50 @@ Vizz licence, say) is refused. The policy is one line in
 [`src/licence/Licence.h`](src/licence/Licence.h) — `Open`, `Watermark` (a
 "DATAMOSH · UNLICENSED" band over working output) or `Lock` — and, the project
 being MIT, anyone building from source can set it to `Open`.
+
+## Crash reports and feedback
+
+**Send Feedback**, a button in its own **Help** section just above Licence,
+opens `https://letissier.ie/feedback?product=datamosh&version=1.0.0` in the
+default browser. Typing `feedback` into the Licence field does the same.
+
+**Crash reports are off unless you say otherwise**, and nothing is ever sent
+without that. A plugin cannot honestly catch its host crashing — installing a
+signal handler or an exception filter inside Resolume would replace Resolume's
+own, for every plugin in the process — so the plugin notices afterwards:
+
+- While an instance is inside one of Resolume's calls, a small memory-mapped
+  file in the licence folder (`reports/running/`) says so, with the name of the
+  pass it is on. The operating system keeps what was written when a process
+  dies, so if Resolume dies mid-frame the next launch finds the flag still set.
+  If Resolume dies anywhere else, nothing is set and nothing is reported.
+- An error caught inside the plugin (the frame is passed through and it carries
+  on) is noted once per session.
+
+Either way the Licence field's name then asks, once: `Licence: ... | closed
+unexpectedly last time - type send or discard`. `send` sends that report;
+`discard`, or not answering before the next launch, drops it. `always send`
+sends it and every later one without asking; `reports off` turns that off
+again and throws away anything not yet sent. `README.txt` in the licence
+folder shows the setting and exactly what a report contains.
+
+A report holds the product and version, OS and version, processor type, a random
+install id made on this computer (`install-id` in the licence folder), the kind
+of problem, a one-line summary, which pass it was in, the Resolume version, the
+frame size and frame count. Home folders and user names are removed before
+anything is saved. It never holds a licence key, an email address, a machine id,
+file names, or anything from a composition. At most 20 wait in `reports/queue/`;
+they go from the background thread a minute after launch, to
+`letissier.ie/api/reports/crash` only, with an 8-second timeout, and a report the
+site cannot take yet waits for the next launch rather than being retried.
+
+What it cannot do: there is no stack trace, and a GPU driver that faults after
+our call has returned is not attributed to us. The marker is created by the
+background thread, so an instance's first moments are not covered.
+
+`LETISSIER_API=http://localhost:3000` in the environment points the licence and
+report calls at a test deployment. Tokens are still checked against the key
+built into the plugin, so this cannot license anything.
 
 ## Licence
 

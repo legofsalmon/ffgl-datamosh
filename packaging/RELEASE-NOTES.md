@@ -9,53 +9,47 @@ Two FFGL plugins that simulate datamoshing in Resolume, over a shared render cor
 
 ---
 
-## This is a pre-release — read this first
+## 1.0.0 — the first licensed release
 
-Everything here is verified by an automated test suite: 88 tests running a real
+Datamosh now needs a licence key or a free trial from
+[letissier.ie](https://letissier.ie) (see **Licence** below). The version jumps
+from 0.3.0 to 1.0.0; the plugin ids are unchanged, so compositions saved with
+0.x open as before. Nothing about the effect itself changed between 0.3.0 and
+1.0.0.
+
+### Where it stands
+
+Everything here is verified by an automated test suite: 107 tests running a real
 headless OpenGL 4.1 context against synthetic footage with known ground truth,
-green on Linux, Windows and macOS.
+green on Linux, with Windows and macOS builds checked on every change.
 
-**It now loads and runs in Resolume.** The smoke test passed on a real host:
-both plugins register and instantiate, the effect renders, Resolume delivers
+**It loads and runs in Resolume.** The smoke test passed on a real host: both
+plugins register and instantiate, the effect renders, Resolume delivers
 parameter writes, the motion estimator is genuinely running, and wide-range
 parameters arrive at their real values rather than normalised.
 
 What has *not* been done is the rest of the pass — the aesthetic sweeps, a
 30-minute soak, GL-state hygiene in a chain, and the mixer beyond instantiation.
-The tuning defaults have still never been judged against real footage. Treat
-this as something to try and report back on, not something to put in a show
-without rehearsing first.
+The tuning defaults have still never been judged against real footage. Rehearse
+with it before you put it in a show.
 
-## What is new in 0.3.0
+### What is new in 1.0.0
 
-Three new controls, four fixes, and the version is now visible on an installed
-machine.
-
-**Mask Amount / Mask Invert** — the brightness of the motion input decides where
-the mosh is allowed to stick. In **Mosh Transplant** that is the *other* layer,
-so a layer of scrolling text or a generator becomes a stencil that also drives
-the movement. Alpha comes along free.
-
-**Spread** — damage that creeps outward into blocks that are not moving at all.
-Everything else here decides each pixel from this frame alone; this is the one
-control with a memory of what happened next door. Bring the level down and the
-frontier goes out first, so it retreats the way it came.
-
-**View — Result / Motion / Gate** — ask the plugin what it is thinking. *Motion*
-draws the estimated field, with brightness on the same ruler as Motion
-Threshold. *Gate* draws the decision in four colours: black for no motion, red
-for rejected by the threshold, green for open, cyan where the creep has reached,
-grey where the mask is closing it. If nothing is happening, this answers why in
-one glance.
-
-### Fixes worth knowing about
-
-- The **Corrupt** preset rendered nothing at all, and **Quantise** did nothing on
-  ordinary footage — its dead zone covered everything slower than 3 px/frame at
-  the default block size.
-- The motion gate meant something different at every frame rate.
-- An out-of-range dropdown value — which a composition saved by a *later* build
-  can produce — crashed the plugin.
+- **Licence keys and a free trial.** A new last parameter, **Licence**, on both
+  plugins. Details below.
+- **Send Feedback.** A button in a new **Help** section opens the feedback page
+  in your browser, with the product and version already filled in.
+- **Crash reports — off unless you turn them on.** If Resolume closes while
+  Datamosh is in the middle of a frame, the next launch notices and the Licence
+  field asks once whether to send a report: type `send` or `discard`.
+  `always send` turns automatic reports on; `reports off` turns them off. A
+  report never holds your licence key, email, name, file names or anything from
+  your composition, and `README.txt` in the licence folder shows exactly what it
+  does hold.
+- **An error inside the plugin no longer reaches Resolume.** It is caught, the
+  frame is passed through, and one `datamosh: error in ...` line goes to the log.
+- **A frame size the GPU cannot allocate** is no longer retried on every frame;
+  the plugin passes through and tries again a couple of seconds later.
 
 ### Which version am I running?
 
@@ -68,15 +62,12 @@ uses all 15 characters FFGL allows, and Resolume addresses an effect by its
 name — a name that changed every release would be a saved composition that
 quietly failed to find its effect after an upgrade.
 
-## 0.2.0 changes what saved values mean
+### Coming from 0.1.x
 
-Several sliders were remapped so their travel does something across its whole
-length — Mosh Amount, Decay, Motion Threshold and Motion Smoothing — and Freeze
-was merged into Motion Smoothing. Endpoints are unchanged; the middle moved. A
-composition saved against 0.1.x will look different at the same slider positions.
-Presets no longer set Mosh Amount, a fresh instance moshes gently rather than
-passing through, and **Default** in the Style list restores the factory panel.
-The full list is in the changelog.
+0.2.0 remapped several sliders so their travel does something across its whole
+length — Mosh Amount, Decay, Motion Threshold and Motion Smoothing — and merged
+Freeze into Motion Smoothing. A composition saved against 0.1.x will look
+different at the same slider positions. The full list is in the changelog.
 
 ## Install
 
@@ -97,8 +88,9 @@ right-click each DLL and tick *Unblock* — that applies to .NET plugins, not to
 these; `LoadLibrary` never reads the mark. If the plugins do not appear, check
 whether **Smart App Control** is on, which rejects unsigned DLLs silently.
 
-Requires Resolume 7.3+. macOS builds are universal (arm64 + x86_64), so Apple
-Silicon is native.
+Requires Resolume 7.3+; 7.4+ to see the Licence field's status in the panel
+(on 7.3 it is in the licence folder's `README.txt` and Resolume's log). macOS
+builds are universal (arm64 + x86_64), so Apple Silicon is native.
 
 ## Licence
 
@@ -110,6 +102,10 @@ your key (`LT-DATA-...`), or your email address for a trial, into that
 already in the composition. An effect that is already running is never locked,
 and nothing waits on the network. Type `folder` for the licence folder and the
 request code for offline activation.
+
+Also typed into that field: `feedback` opens the feedback page, and `send`,
+`discard`, `always send` and `reports off` answer or change the crash-report
+setting.
 
 ## Why this simulates rather than corrupts
 

@@ -52,6 +52,7 @@
 			<li><a href="#output">Output</a></li>
 			<li><a href="#mask">Mask</a></li>
 			<li><a href="#licence">Licence</a></li>
+			<li><a href="#help">Feedback and crash reports</a></li>
 			<li><a href="#mixer">Mixer only</a></li>
 			<li><a href="#interactions">How they interact</a></li>
 		</ul>
@@ -663,6 +664,9 @@
 					<tr><td>folder</td><td class="desc">Opens the licence folder. Its <code>README.txt</code> has the status and the <strong>request code</strong> for activating a computer that is offline.</td></tr>
 					<tr><td>check</td><td class="desc">Checks in with the licence service now. It also happens by itself when online.</td></tr>
 					<tr><td>deactivate</td><td class="desc">Releases this computer's seat, so the key can move to another.</td></tr>
+					<tr><td>feedback</td><td class="desc">Opens the feedback page in your browser, like the Send Feedback button.</td></tr>
+					<tr><td>send / discard</td><td class="desc">Answers the crash-report question, which only appears after a problem.</td></tr>
+					<tr><td>always send / reports off</td><td class="desc">Turns automatic crash reports on, or off again. Off is the default.</td></tr>
 				</tbody>
 			</table>
 			</div>
@@ -678,6 +682,26 @@
 				A refunded licence is revoked: effects added after the next check-in
 				lock, and read <strong>Licence: locked, revoked</strong>.
 			</div>
+
+			<h2 id="help">Feedback and crash reports</h2>
+
+			<p>
+				<strong>Send Feedback</strong>, in the <strong>Help</strong> section just above
+				Licence, opens the feedback page in your browser with the product and version
+				filled in. It does nothing in the first few seconds after an effect is added,
+				so a composition loading never opens a browser.
+			</p>
+
+			<p>
+				<strong>Crash reports are off unless you turn them on.</strong> If Resolume
+				closes while Datamosh is in the middle of a frame, the next time it starts the
+				Licence field's name ends <strong>| closed unexpectedly last time &ndash; type
+				send or discard</strong>. It asks once. A report holds the version, the
+				operating system, the step of the frame it was on, the Resolume version and the
+				frame size, with a random id made on your computer. It never holds your licence
+				key, your email, your name, file names, or anything from your composition, and
+				<code>README.txt</code> in the licence folder shows exactly what it contains.
+			</p>
 
 			<h2 id="mixer">Mosh Transplant only</h2>
 

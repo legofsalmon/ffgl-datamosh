@@ -541,6 +541,26 @@ Style and Block Size changes reallocate; resolution churn; a 30-minute soak.
    the network (no stall adding the effect).
 6. **The check-in.** Online, type `check`; the name returns to `active`, and
    `README.txt`'s "Next check-in due by" moves forward.
+7. **Send Feedback.** The **Help** section, just above Licence, holds one
+   button. Press it on a fresh instance within three seconds of adding it:
+   nothing may happen (that is a composition loading, as far as the plugin can
+   tell). Wait, press it again: the default browser opens
+   `letissier.ie/feedback?product=datamosh&version=1.0.0`, once — a double
+   click is still one page. Try it on Mosh Transplant too, and type `feedback`
+   into the Licence field. Record whether Resolume shows the button at all and
+   whether a saved composition that had it pressed opens a browser on load (it
+   must not).
+8. **Crash reports, off by default.** In the licence folder, `reports/running/`
+   holds one `.mark` file per plugin binary while Resolume runs. Force-quit
+   Resolume while an effect is rendering (Activity Monitor → Force Quit, or
+   Task Manager → End task) and relaunch. Force-quit from outside usually lands
+   between frames, so expect **no** question most times: that is correct, the
+   death was not inside our call. If `README.txt` does say "closed unexpectedly
+   last time", the Licence name should end `| closed unexpectedly last time -
+   type send or discard`. Type `discard`: the question goes and nothing is
+   sent. Confirm `reports/queue/` stays empty with the setting off. Then type
+   `always send` and check `README.txt` says `on`, and `reports off` to put it
+   back. Do not leave it on for the owner.
 
 **Phase R — the restart batch (~15 min).** Everything requiring a restart, run
 once rather than scattered through the day.
