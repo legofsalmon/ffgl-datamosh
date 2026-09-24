@@ -16,6 +16,7 @@
 #include "Passthrough.glsl.h"
 #include "SceneDiff.glsl.h"
 #include "ScreenQuad.glsl.h"
+#include "Watermark.glsl.h"
 
 #include <algorithm>
 #include <cmath>
@@ -114,6 +115,17 @@ bool MoshPipeline::Initialise()
 		return false;
 	}
 
+	// Part of initialising, not optional: without it a restricted instance
+	// would render unmarked, and a locked one would be a bare passthrough —
+	// indistinguishable from a plugin that failed to load.
+	markFont = watermark::CreateTexture();
+	if( markFont == 0 )
+	{
+		FFGLLog::LogToHost( "datamosh: failed to create the licence mark texture" );
+		Release();
+		return false;
+	}
+
 	initialised = true;
 	return true;
 }
@@ -124,6 +136,8 @@ bool MoshPipeline::CompileShaders()
 	// rather than each keeping a copy. MoshCommon.glsl carries the #version line
 	// for both; see the comment at the top of it for why.
 	const std::string common( shaders::MoshCommon );
+	// The two final passes both draw the licence mark, from one copy of it.
+	const std::string mark( shaders::Watermark );
 
 	return CompileOne( ingestShader, shaders::Ingest, "Ingest" ) &&
 	       CompileOne( lumaShader, shaders::Luma, "Luma" ) &&
@@ -133,8 +147,8 @@ bool MoshPipeline::CompileShaders()
 	       CompileOne( flowPostShader, shaders::FlowPost, "FlowPost" ) &&
 	       CompileOne( damageShader, shaders::DamageSpread, "DamageSpread" ) &&
 	       CompileOne( moshShader, common + shaders::Mosh, "Mosh" ) &&
-	       CompileOne( compositeShader, common + shaders::Composite, "Composite" ) &&
-	       CompileOne( passthroughShader, shaders::Passthrough, "Passthrough" );
+	       CompileOne( compositeShader, common + mark + shaders::Composite, "Composite" ) &&
+	       CompileOne( passthroughShader, "#version 410 core\n" + mark + shaders::Passthrough, "Passthrough" );
 }
 
 void MoshPipeline::ReleaseTargets()
@@ -174,6 +188,11 @@ void MoshPipeline::Release()
 	compositeShader.FreeGLResources();
 	passthroughShader.FreeGLResources();
 	quad.Release();
+	if( markFont != 0 )
+	{
+		glDeleteTextures( 1, &markFont );
+		markFont = 0;
+	}
 	profiler.Release();
 
 	initialised = false;
@@ -623,7 +642,16 @@ bool MoshPipeline::Advance( const FrameInputs& inputs, const MoshParams& params 
 	return true;
 }
 
-void MoshPipeline::Composite( GLuint hostFBO, float mix, DebugView view )
+void MoshPipeline::SetMarkUniforms( ffglex::FFGLShader& shader, Watermark mark, float width, float height,
+                                    float uvScaleU, float uvScaleV )
+{
+	shader.Set( "MarkMessage", static_cast< int >( mark ) );
+	shader.Set( "MarkColumns", watermark::Columns( mark ) );
+	shader.Set( "MarkFrame", width, height );
+	shader.Set( "MarkUVScale", uvScaleU, uvScaleV );
+}
+
+void MoshPipeline::Composite( GLuint hostFBO, float mix, DebugView view, Watermark mark )
 {
 	if( !initialised || !accum.IsValid() )
 		return;
@@ -652,6 +680,9 @@ void MoshPipeline::Composite( GLuint hostFBO, float mix, DebugView view )
 	// PassDamage swapped after writing and nothing else advances it, so Front()
 	// is still the field PassMosh read.
 	textures.Add( compositeShader, "Damage", damage.Front().GetTexture() );
+	textures.Add( compositeShader, "MarkFont", markFont );
+	SetMarkUniforms( compositeShader, mark, static_cast< float >( frameWidth ), static_cast< float >( frameHeight ),
+	                 1.0f, 1.0f );
 
 	compositeShader.Set( "Mix", mix );
 	compositeShader.Set( "View", static_cast< int >( view ) );
@@ -678,7 +709,7 @@ void MoshPipeline::Composite( GLuint hostFBO, float mix, DebugView view )
 	quad.Draw();
 }
 
-void MoshPipeline::Passthrough( GLuint hostFBO, const FrameInputs& inputs )
+void MoshPipeline::Passthrough( GLuint hostFBO, const FrameInputs& inputs, Watermark mark )
 {
 	if( inputs.pixelTexture == 0 || !passthroughShader.IsReady() )
 		return;
@@ -689,7 +720,14 @@ void MoshPipeline::Passthrough( GLuint hostFBO, const FrameInputs& inputs )
 
 	PassTextures textures;
 	textures.Add( passthroughShader, "InputTexture", inputs.pixelTexture );
+	textures.Add( passthroughShader, "MarkFont", markFont );
 	passthroughShader.Set( "MaxUV", inputs.pixelMaxU, inputs.pixelMaxV );
+	// The quad's uv here runs 0..MaxUV across the output, so the mark scales it
+	// back to 0..1 to find its own position.
+	SetMarkUniforms( passthroughShader, mark, static_cast< float >( inputs.width ),
+	                 static_cast< float >( inputs.height ),
+	                 inputs.pixelMaxU > 0.0f ? 1.0f / inputs.pixelMaxU : 1.0f,
+	                 inputs.pixelMaxV > 0.0f ? 1.0f / inputs.pixelMaxV : 1.0f );
 
 	quad.Draw();
 }

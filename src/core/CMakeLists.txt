@@ -4,6 +4,7 @@ add_library( datamosh_core OBJECT
     GpuProfiler.h     GpuProfiler.cpp
     MoshParams.h
     MoshPipeline.h    MoshPipeline.cpp
+    Watermark.h       Watermark.cpp
 )
 add_library( datamosh::core ALIAS datamosh_core )
 
@@ -48,6 +49,7 @@ datamosh_embed_shaders( datamosh_core
     shaders/Mosh.glsl
     shaders/Composite.glsl
     shaders/Passthrough.glsl
+    shaders/Watermark.glsl
 )
 
 if( MSVC )

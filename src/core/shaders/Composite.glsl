@@ -5,7 +5,8 @@
 // clamping it would compound every frame.
 //
 // No #version line: MoshCommon.glsl is prepended at compile time and carries it,
-// along with the field sampling and the gate. The Motion and Gate views call
+// along with the field sampling and the gate. Watermark.glsl is prepended after
+// it, for ApplyMark. The Motion and Gate views call
 // exactly the functions the mosh pass called, on exactly the textures and
 // uniform values it was handed — MoshPipeline records them in PassMosh — so this
 // cannot draw a field the warp did not use.
@@ -189,5 +190,7 @@ void main()
 	colour.a   = clamp( colour.a, 0.0, 1.0 );
 	colour.rgb = clamp( colour.rgb * colour.a, vec3( 0.0 ), vec3( colour.a ) );
 
-	fragColor = colour;
+	// Last, over everything including the diagnostic views: the licence band
+	// (Watermark.glsl, prepended). An identity on a licensed copy.
+	fragColor = ApplyMark( colour, uv );
 }
