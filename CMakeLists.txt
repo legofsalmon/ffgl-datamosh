@@ -3,7 +3,8 @@ cmake_minimum_required( VERSION 3.20 )
 project( ffgl-datamosh
     VERSION 0.3.0
     DESCRIPTION "Datamosh effects for Resolume"
-    LANGUAGES CXX
+    # C for Monocypher, the licence code's Ed25519 (external/monocypher).
+    LANGUAGES C CXX
 )
 
 # Apple Silicon hosts cannot load x86_64 plugins and vice versa, so Resolume
@@ -31,7 +32,13 @@ list( APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake" )
 include( FFGLPlugin )
 include( EmbedShaders )
 
+if( APPLE )
+    # The licence code's macOS half (machine id, HTTPS) is Objective-C++.
+    enable_language( OBJCXX )
+endif()
+
 add_subdirectory( src/core )
+add_subdirectory( src/licence )
 add_subdirectory( src/plugins )
 
 if( DATAMOSH_BUILD_TESTS )

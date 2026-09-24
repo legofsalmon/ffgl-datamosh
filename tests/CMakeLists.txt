@@ -30,13 +30,19 @@ add_executable( datamosh_tests
     main.cpp
     test_pipeline.cpp
     test_plugin.cpp
+    test_licence.cpp
     benchmark.cpp
     harness/GLContext.h   harness/GLContext.cpp
     harness/Synthetic.h   harness/Synthetic.cpp
     harness/TestRunner.h
+    harness/Licence.h     harness/Licence.cpp
 )
 
-target_link_libraries( datamosh_tests PRIVATE datamosh::core datamosh::ffgl_sdk )
+target_link_libraries( datamosh_tests PRIVATE datamosh::core datamosh::licence datamosh::ffgl_sdk )
+# The licence service's own signed vectors, copied verbatim from
+# letissier.ie/integrate/vectors.json.
+target_compile_definitions( datamosh_tests PRIVATE
+    DATAMOSH_TEST_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data" )
 target_include_directories( datamosh_tests PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}"
     # The plugin classes live in headers so this can drive them; only the

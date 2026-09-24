@@ -1,4 +1,5 @@
 #include "harness/GLContext.h"
+#include "harness/Licence.h"
 #include "harness/TestRunner.h"
 
 #include <GL.h>
@@ -25,9 +26,15 @@ int main( int argc, char** argv )
 
 	if( benchmark )
 	{
+		datamosh::test::ScopedLicence unrestricted( datamosh::test::DefaultLicenceService() );
 		datamosh::test::RunBenchmark();
 		return 0;
 	}
+
+	// Before any plugin exists: every test renders under a decided, unrestricted
+	// licence unless it installs its own, and nothing reads the real licence
+	// folder or starts the real worker.
+	datamosh::test::ScopedLicence licence( datamosh::test::DefaultLicenceService() );
 
 	auto& registry = datamosh::test::Registry::Instance();
 
