@@ -22,6 +22,9 @@
 #include <cstdio>
 #include <limits>
 #include <cstring>
+#include <new>
+#include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace datamosh::test {
@@ -1783,6 +1786,174 @@ TEST( TheWatermarkPolicyMarksTheOutputAndNothingElse )
 	const LicensedRun clean = RunEffect( host, 0.0f );
 	CHECK( MaxDifferenceFromInput( clean ) <= 1.5f / 255.0f );
 	host.Teardown();
+}
+
+
+// ---------------------------------------------------------------------------
+// Nothing crosses the FFGL boundary
+// ---------------------------------------------------------------------------
+
+namespace {
+
+/// An effect that can be made to throw from inside a frame, after its inputs
+/// were gathered and before the pipeline runs: AdjustParams is the one virtual
+/// hook on that path, and ReadParams calls it every frame.
+struct ThrowingEffect : Testable< DatamoshEffect >
+{
+	bool throwNow = false;
+
+protected:
+	void AdjustParams( MoshParams& ) const override
+	{
+		if( throwNow )
+			throw std::runtime_error( "injected failure" );
+	}
+};
+
+/// A plugin whose constructor throws, as an allocation failure would.
+struct ExplodingEffect : DatamoshEffect
+{
+	ExplodingEffect() { throw std::bad_alloc(); }
+};
+
+std::vector< std::string >& CapturedLog()
+{
+	static std::vector< std::string > lines;
+	return lines;
+}
+
+void CaptureLogLine( char* line )
+{
+	CapturedLog().emplace_back( line ? line : "" );
+}
+
+/// Routes the host log into CapturedLog for one scope.
+struct ScopedLogCapture
+{
+	ScopedLogCapture()
+	{
+		CapturedLog().clear();
+		FFGLLog::SetLogCallback( &CaptureLogLine );
+	}
+	~ScopedLogCapture() { FFGLLog::SetLogCallback( nullptr ); }
+};
+
+size_t LinesContaining( const std::string& needle )
+{
+	size_t count = 0;
+	for( const std::string& line : CapturedLog() )
+		count += line.find( needle ) != std::string::npos ? 1 : 0;
+	return count;
+}
+
+}  // namespace
+
+TEST( AnExceptionInAFrameIsCaughtCountedLoggedAndPassedThrough )
+{
+	// ProcessOpenGL is called by the host through plugMain, a C function. An
+	// exception unwinding out of it is undefined behaviour and, in practice,
+	// Resolume going down with the show in it. So every entry point catches
+	// everything — and because a frame that throws is rendered as a bypass,
+	// which is also what a dead plugin looks like, the catch is counted and
+	// logged rather than silent.
+	ScopedLogCapture log;
+	Host host;
+	CHECK( host.Setup( FRAME_WIDTH, FRAME_HEIGHT, 1 ) );
+
+	ThrowingEffect plugin;
+	const FFGLViewportStruct viewport = host.Viewport();
+	CHECK( plugin.InitGL( &viewport ) == FF_SUCCESS );
+	plugin.SetFloatParameter( plugin.ParamIndex( "Mosh Amount" ), 1.0f );
+	plugin.SetFloatParameter( plugin.ParamIndex( "Motion Threshold" ), 0.0f );
+
+	LicensedRun run;
+	float       shift   = 0.0f;
+	int         frame   = 0;
+	bool        escaped = false;
+	auto render = [ & ]( FFResult& result ) {
+		++frame;
+		shift += 3.0f;
+		host.Fill( 0, shift, 0.0f );
+		plugin.SetTime( frame / 60.0 );
+		ProcessOpenGLStruct pGL = host.Frame();
+		try
+		{
+			result = plugin.ProcessOpenGL( &pGL );
+		}
+		catch( ... )
+		{
+			escaped = true;
+			result  = FF_FAIL;
+		}
+		run.input  = MakeShiftedPattern( FRAME_WIDTH, FRAME_HEIGHT, shift, 0.0f );
+		run.output = ReadTarget( host.Output() );
+	};
+
+	// Live first, so the passthrough below is a change of behaviour and not
+	// an instance that was never moshing.
+	FFResult result = FF_FAIL;
+	for( int i = 0; i < 12; ++i )
+		render( result );
+	CHECK( result == FF_SUCCESS );
+	CHECK( MeanDifferenceFromInput( run ) > 0.01f );
+	CHECK( plugin.CaughtErrors() == 0 );
+
+	const unsigned int before = CaughtErrorsInProcess().load();
+	plugin.throwNow           = true;
+	render( result );
+	CHECK( !escaped );
+	CHECK( result == FF_SUCCESS );
+	CHECK( MaxDifferenceFromInput( run ) <= 1.5f / 255.0f );
+	CHECK( plugin.CaughtErrors() == 1 );
+	CHECK( CaughtErrorsInProcess().load() == before + 1 );
+	CHECK( LinesContaining( "datamosh: error in a frame" ) == 1 );
+	CHECK( LinesContaining( "injected failure" ) == 1 );
+
+	// Counted every time, logged at 1, 2, 4, 8...
+	render( result );
+	render( result );
+	CHECK( !escaped );
+	CHECK( plugin.CaughtErrors() == 3 );
+	CHECK( LinesContaining( "datamosh: error in a frame" ) == 2 );
+
+	// And it recovers by itself once whatever threw stops throwing.
+	plugin.throwNow = false;
+	for( int i = 0; i < 12; ++i )
+		render( result );
+	CHECK( result == FF_SUCCESS );
+	CHECK( MeanDifferenceFromInput( run ) > 0.01f );
+	CHECK( plugin.CaughtErrors() == 3 );
+
+	CHECK( plugin.DeInitGL() == FF_SUCCESS );
+	host.Teardown();
+}
+
+TEST( AConstructorThatThrowsIsAFailedInstanceNotAnException )
+{
+	// The SDK's PluginFactory is a bare `new T()` inside plugMain. The factory
+	// both plugins register instead turns an exception into FF_FAIL, which the
+	// host handles by not creating the instance.
+	ScopedLogCapture log;
+	CFFGLPlugin*     instance = reinterpret_cast< CFFGLPlugin* >( 0x1 );
+	bool             escaped  = false;
+	FFResult         result   = FF_SUCCESS;
+	try
+	{
+		result = GuardedFactory< ExplodingEffect >( &instance );
+	}
+	catch( ... )
+	{
+		escaped = true;
+	}
+	CHECK( !escaped );
+	CHECK( result == FF_FAIL );
+	CHECK( instance == nullptr );
+	CHECK( LinesContaining( "could not create an instance" ) == 1 );
+
+	CHECK( GuardedFactory< DatamoshEffect >( &instance ) == FF_SUCCESS );
+	CHECK( instance != nullptr );
+	delete instance;
+	CHECK( GuardedFactory< DatamoshEffect >( nullptr ) == FF_FAIL );
 }
 
 }  // namespace datamosh::test

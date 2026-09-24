@@ -27,7 +27,7 @@ static_assert( sizeof( PLUGIN_NAME ) <= 16,
                "FFGL PluginName is char[16] and is not null-terminated when full" );
 
 static CFFGLPluginInfo PluginInfo(
-	PluginFactory< datamosh::DatamoshMixer >,
+	datamosh::GuardedFactory< datamosh::DatamoshMixer >,
 	"DMMX",               // unique ID, maximum four characters
 	PLUGIN_NAME,
 	2,                        // FFGL API major
