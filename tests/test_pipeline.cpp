@@ -1500,4 +1500,50 @@ TEST( QuantiseDoesNotSilenceSlowMotion )
 		CHECK( departure( 1.5f, quantise ) > 0.02f );
 }
 
+TEST( AFailedAllocationIsNotRetriedEveryFrame )
+{
+	// A failed allocation used to tear down and reallocate every buffer on
+	// every frame. The layer still passed through, as designed, so nothing on
+	// screen said anything was wrong — the application just ground, and the
+	// log filled with the same line sixty times a second.
+	MoshPipeline pipeline;
+	InputTexture texture;
+	CHECK( pipeline.Initialise() );
+	CHECK( texture.Create( 64, 64 ) );
+
+	GLint largest = 0;
+	glGetIntegerv( GL_MAX_TEXTURE_SIZE, &largest );
+
+	// Wider than any texture this driver can make, so it fails for certain
+	// and at once, without actually exhausting anything.
+	FrameInputs impossible;
+	impossible.pixelTexture  = texture.GetHandle();
+	impossible.motionTexture = texture.GetHandle();
+	impossible.width         = largest + 1;
+	impossible.height        = 8;
+
+	MoshParams params;
+	for( int frame = 0; frame < 10; ++frame )
+		CHECK( !pipeline.Advance( impossible, params ) );
+	CHECK( pipeline.GetAllocationAttempts() == 1 );
+
+	// It is tried again, once, after the back-off.
+	for( int frame = 0; frame < MoshPipeline::ALLOCATION_RETRY_FRAMES; ++frame )
+		pipeline.Advance( impossible, params );
+	CHECK( pipeline.GetAllocationAttempts() == 2 );
+
+	// A different request is a different question, and is asked straight away.
+	FrameInputs usable = impossible;
+	usable.width       = 64;
+	usable.height      = 64;
+	CHECK( pipeline.Advance( usable, params ) );
+	CHECK( pipeline.GetAllocationAttempts() == 3 );
+	CHECK( pipeline.HasHistory() );
+
+	// The allocation's own GL error was read and cleared, so the host does not
+	// inherit it: the runner fails any test that leaves one behind.
+	texture.Release();
+	pipeline.Release();
+}
+
 }  // namespace datamosh::test

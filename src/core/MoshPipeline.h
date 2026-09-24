@@ -82,6 +82,14 @@ public:
 	/// Total VRAM held by the intermediate buffers.
 	size_t GetVramBytes() const;
 
+	/// How many times the render targets have been (re)allocated, successful
+	/// or not. For asserting that a failure is not retried every frame.
+	int GetAllocationAttempts() const { return allocationAttempts; }
+
+	/// After a failed allocation, how many Advance calls pass before the same
+	/// geometry is tried again: about two seconds at 60 fps.
+	static constexpr int ALLOCATION_RETRY_FRAMES = 120;
+
 	GLsizei GetWidth() const  { return frameWidth; }
 	GLsizei GetHeight() const { return frameHeight; }
 	GLsizei GetFlowWidth() const  { return flowWidth; }
@@ -161,6 +169,14 @@ private:
 	GLsizei flowWidth       = 0;
 	GLsizei flowHeight      = 0;
 	int     activeBlockSize = 0;
+
+	/// The geometry that last failed to allocate, and how long until it may be
+	/// tried again. See EnsureResources.
+	GLsizei failedWidth       = 0;
+	GLsizei failedHeight      = 0;
+	int     failedBlockSize   = 0;
+	int     framesUntilRetry  = 0;
+	int     allocationAttempts = 0;
 
 	/// False before the first frame and after every reallocation, when there is
 	/// no previous frame to displace.

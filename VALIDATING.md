@@ -454,7 +454,7 @@ nothing else. Score S5 *before* you read the log.
 | Log line | Means |
 | --- | --- |
 | `failed to compile shader <name>` | Blocker, and it names the shader. Highest-probability failure on Apple's GL 4.1 compiler. |
-| `could not allocate render targets` | `GL_RGBA16F` / `GL_R16F` / `GL_RGBA32F` not colour-renderable at this size, or VRAM exhausted. **Note the shape:** the effect sits in the chain with every parameter movable, renders passthrough, and re-attempts the whole teardown-and-reallocate *every frame*. The layer degrades gracefully; the application grinds. |
+| `could not allocate render targets` | `GL_RGBA16F` / `GL_R16F` / `GL_RGBA32F` not colour-renderable at this size, or VRAM exhausted. **Note the shape:** the effect sits in the chain with every parameter movable and renders passthrough. From 1.0.0 it logs this once per size (with the size, and a `GL_...` line naming the error) and retries every ~120 frames rather than every frame; before 1.0.0 it reallocated every frame and the application ground. |
 | The buffers line **repeats**, near once per frame | The instance is being asked for two sizes alternately — output and preview. `EnsureResources` reallocates and resets `hasHistory` on every size change, so accumulation can never build. Presents as a faint stutter rather than an effect, and the repeating line is the only way to see it. |
 
 If you can't see the log at all, run Resolume from a terminal so the SDK's
