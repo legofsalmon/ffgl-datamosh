@@ -139,6 +139,12 @@ bool MoshPipeline::CompileShaders()
 	// The two final passes both draw the licence mark, from one copy of it.
 	const std::string mark( shaders::Watermark );
 
+	// Shader compilation is the likeliest place for a strict driver to fall
+	// over (Apple's GL 4.1 compiler, see VALIDATING.md S4), so it is its own
+	// breadcrumb stage.
+	if( breadcrumb )
+		breadcrumb->Stage( "compile-shaders" );
+
 	return CompileOne( ingestShader, shaders::Ingest, "Ingest" ) &&
 	       CompileOne( lumaShader, shaders::Luma, "Luma" ) &&
 	       CompileOne( sceneDiffShader, shaders::SceneDiff, "SceneDiff" ) &&
@@ -204,6 +210,24 @@ bool MoshPipeline::EnsureResources( GLsizei width, GLsizei height, int blockSize
 	    colourTarget.IsValid() )
 		return true;
 
+	// A geometry that just failed is not retried on the very next frame.
+	//
+	// Before this, a failure — VRAM exhausted, or a format that is not
+	// colour-renderable at this size — tore down and reallocated every buffer
+	// on every frame, logging a line each time: the layer degraded to
+	// passthrough as intended, but the whole application ground, and the log
+	// became sixty identical lines a second. Now it is one attempt, one log
+	// line, and another attempt only after ALLOCATION_RETRY_FRAMES — or at once
+	// if the size or block size changes, since that is a different request.
+	const bool sameAsFailure =
+		width == failedWidth && height == failedHeight && blockSize == failedBlockSize;
+	if( sameAsFailure && framesUntilRetry > 0 )
+	{
+		--framesUntilRetry;
+		return false;
+	}
+	++allocationAttempts;
+
 	frameWidth      = width;
 	frameHeight     = height;
 	activeBlockSize = blockSize;
@@ -212,6 +236,8 @@ bool MoshPipeline::EnsureResources( GLsizei width, GLsizei height, int blockSize
 
 	// Everything downstream assumed the old geometry, so none of it is valid.
 	// Allocate() releases first, so this doubles as the resize path.
+	if( breadcrumb )
+		breadcrumb->Stage( "allocate" );
 	const bool ok =
 		colourTarget.Allocate( width, height, GL_RGBA16F ) &&
 		// Mips on luma are the search pyramid: coarse levels resolve large
@@ -236,13 +262,28 @@ bool MoshPipeline::EnsureResources( GLsizei width, GLsizei height, int blockSize
 
 	if( !ok )
 	{
-		FFGLLog::LogToHost( "datamosh: could not allocate render targets" );
+		// Names the GL error and clears it, so the host does not inherit an
+		// error latched by our allocation and blame the next thing it checks.
+		CheckGL( "allocating render targets" );
+		if( !sameAsFailure )
+			FFGLLog::LogToHost( ( "datamosh: could not allocate render targets for " + std::to_string( width ) +
+			                      "x" + std::to_string( height ) + "; passing through, next try in " +
+			                      std::to_string( ALLOCATION_RETRY_FRAMES ) + " frames" )
+			                        .c_str() );
+		failedWidth      = width;
+		failedHeight     = height;
+		failedBlockSize  = blockSize;
+		framesUntilRetry = ALLOCATION_RETRY_FRAMES;
 		// Only the targets. Tearing down the shaders and the quad here would
 		// take the passthrough path with them, turning a recoverable allocation
 		// failure into a permanently black layer.
 		ReleaseTargets();
 		return false;
 	}
+	failedWidth      = 0;
+	failedHeight     = 0;
+	failedBlockSize  = 0;
+	framesUntilRetry = 0;
 
 	// Fresh buffers hold whatever the driver left behind, which for a feedback
 	// system means the first frame could seed itself with garbage.
@@ -713,6 +754,8 @@ void MoshPipeline::Passthrough( GLuint hostFBO, const FrameInputs& inputs, Water
 {
 	if( inputs.pixelTexture == 0 || !passthroughShader.IsReady() )
 		return;
+	if( breadcrumb )
+		breadcrumb->Stage( "passthrough" );
 
 	glBindFramebuffer( GL_FRAMEBUFFER, hostFBO );
 

@@ -119,8 +119,8 @@ that happens — no notification, no badge, no dialog. Go to triage below.
 
 **This is also the version check.** Confirmed against a live Resolume on
 2026-09-05: the effects list carries the plugin's FFGL *description*, and from
-0.3.0 that description ends with the version, so `v0.3.0` appears in the output
-above. Older builds carry no version anywhere, so its absence means the host has
+0.3.0 that description ends with the version, so the installed version —
+`v1.0.0` for the first release, or later — appears in the output above. Older builds carry no version anywhere, so its absence means the host has
 loaded a pre-0.3.0 binary — which is worth knowing before anything below is
 believed, since a stale copy in a second plugin folder looks identical to a
 fresh one.
@@ -173,6 +173,12 @@ reports one (display names need 7.4.0), and grep the log for `datamosh: locked`:
   that the API writes text parameters; if the name does not change, ask the user
   to type it instead. Within a few seconds the name
   should change and the instance should unlock without being re-added.
+
+Just above it is `Send Feedback`, an **event** (trigger) parameter in its own
+`Help` group. That is expected too. Do not press it through the API: it opens a
+browser on the user's machine. Leave the Licence field's crash-report commands
+(`send`, `always send`) alone as well — sending a report is the user's call,
+and a question the label asks after a crash is theirs to answer.
 
 The field always reads back empty — by design, so a key never lands in a saved
 composition. Never score it by its value. If the user cannot license the
@@ -381,6 +387,8 @@ more than an admitted gap.
 - **Whether parameters render as collapsible groups**, and whether the effect and
   mixer thumbnails draw. UI, not API.
 - **Sustained performance and VRAM over a 30-minute soak.**
+- **Whether Send Feedback opens a browser, and the crash-report question**:
+  both are VALIDATING.md Phase L, items 7 and 8, and both are the user's to do.
 - **Whether the Licence field behaves in Resolume's UI**: that it accepts a pasted
   token of several hundred characters, and that the saved `.avc` holds no key.
   VALIDATING.md Phase L is the procedure.

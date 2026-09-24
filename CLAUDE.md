@@ -11,7 +11,7 @@ field. Windows and macOS.
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --parallel
-ctest --test-dir build --output-on-failure     # 88 tests, headless EGL + llvmpipe
+ctest --test-dir build --output-on-failure     # 107 tests, headless EGL + llvmpipe
 ./build/tests/datamosh_tests --profile          # per-pass GPU timing
 ```
 
@@ -96,6 +96,29 @@ both if you touch that path; `ALockedInstancePassesThroughAndSaysSo` and
   their own service with a fake server and clock (`tests/harness/Licence.h`).
 - The `Licence` text field never stores or echoes what is typed, so keys and
   emails stay out of saved compositions.
+- `Licence` stays the **last** parameter. `Send Feedback` (group `Help`) sits
+  just before it. Anything new goes before those two with a group name not
+  already used above, and every existing index stays put.
+
+## Crash reports and the FFGL boundary
+
+- **No exception may cross into the host.** Every FFGL entry point the plugin
+  overrides is wrapped in `DATAMOSH_CATCH_ALL`, and instances are made through
+  `GuardedFactory`. A caught error passes the frame through, logs `datamosh:
+  error in ...` (at 1, 2, 4, 8... so it cannot flood) and counts. A new
+  override needs the same wrapper, or one throw takes Resolume down.
+- **Never install a signal handler, `SetUnhandledExceptionFilter`,
+  `std::set_terminate` or anything else process-wide.** It would replace
+  Resolume's own for every plugin. Crashes are found on the next launch from
+  the breadcrumb marker (`src/licence/CrashMarks.h`) instead.
+- **The marker file is created by the licence worker, never on a host call.**
+  An instance claims its slot on a frame with an atomic exchange; after that a
+  frame costs a few plain stores. `ThePluginMarksEachCallAndClearsItOnTheWayOut`
+  checks that InitGL does not touch the disk.
+- **Nothing is sent without consent.** Off by default; `send` or `always send`
+  typed into the Licence field is the only way anything leaves.
+  `WithTheSettingOffAndNoAnswerNothingIsEverSent` pins it. Promoting pending
+  reports on startup once broke this, and only that test caught it.
 
 ## Testing
 

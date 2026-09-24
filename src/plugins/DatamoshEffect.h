@@ -18,6 +18,8 @@ public:
 	}
 
 protected:
+	const char* BinaryName() const override { return "Datamosh"; }
+
 	bool GatherInputs( ProcessOpenGLStruct* pGL, FrameInputs& inputs ) override
 	{
 		if( pGL->numInputTextures < 1 || pGL->inputTextures[ 0 ] == nullptr )

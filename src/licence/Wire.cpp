@@ -1,6 +1,11 @@
 #include "Wire.h"
 
 #include "Json.h"
+#include "Licence.h"
+
+#include <algorithm>
+#include <cctype>
+#include <cstdlib>
 
 namespace datamosh::licence {
 
@@ -15,6 +20,67 @@ std::string Field( const std::map< std::string, json::Value >& object, const cha
 }
 
 }  // namespace
+
+std::string ServiceUrl()
+{
+	const char* overridden = std::getenv( "LETISSIER_API" );
+	if( overridden && ParseServiceUrl( overridden ).valid )
+	{
+		std::string url = overridden;
+		while( !url.empty() && url.back() == '/' )
+			url.pop_back();
+		return url;
+	}
+	return SERVICE_URL;
+}
+
+ServiceAddress ParseServiceUrl( const std::string& url )
+{
+	ServiceAddress address;
+	std::string    rest;
+	if( url.rfind( "https://", 0 ) == 0 )
+	{
+		address.secure = true;
+		address.port   = 443;
+		rest           = url.substr( 8 );
+	}
+	else if( url.rfind( "http://", 0 ) == 0 )
+	{
+		address.secure = false;
+		address.port   = 80;
+		rest           = url.substr( 7 );
+	}
+	else
+		return address;
+
+	const size_t slash = rest.find( '/' );
+	std::string  authority = rest.substr( 0, slash );
+	address.basePath       = slash == std::string::npos ? std::string() : rest.substr( slash );
+	while( !address.basePath.empty() && address.basePath.back() == '/' )
+		address.basePath.pop_back();
+	// No credentials, query or fragment in a base URL.
+	if( authority.empty() || authority.find( '@' ) != std::string::npos ||
+	    address.basePath.find_first_of( "?#" ) != std::string::npos )
+		return address;
+
+	const size_t colon = authority.rfind( ':' );
+	if( colon != std::string::npos )
+	{
+		const std::string digits = authority.substr( colon + 1 );
+		if( digits.empty() || digits.size() > 5 ||
+		    !std::all_of( digits.begin(), digits.end(), []( char c ) { return std::isdigit( static_cast< unsigned char >( c ) ) != 0; } ) )
+			return address;
+		address.port = std::atoi( digits.c_str() );
+		if( address.port <= 0 || address.port > 65535 )
+			return address;
+		authority.erase( colon );
+	}
+	if( authority.empty() )
+		return address;
+	address.host  = authority;
+	address.valid = true;
+	return address;
+}
 
 Reply ParseReply( const HttpResponse& response )
 {

@@ -69,6 +69,11 @@ Requirements
 Resolume 7.3 or later. 7.11+ for Apple Silicon, which these bundles support
 natively — they are universal binaries carrying both arm64 and x86_64.
 
+Resolume 7.4 or later shows the Licence field's status ("Licence: active",
+"locked", the crash-report question) in the panel. On 7.3 the field still
+works, but its name stays "Licence"; the status is in README.txt in the
+licence folder and in Resolume's log.
+
 Parameter groups need 7.3+; on older versions the parameters still work but
 appear as one flat list.
 
@@ -94,6 +99,21 @@ Its README.txt has the status, and the request code for activating a
 computer that is offline.
 
 
+Feedback and crash reports
+--------------------------
+
+The Send Feedback button (in the Help section, just above Licence) opens the
+feedback page in your browser. Typing "feedback" into the Licence field does
+the same.
+
+Crash reports are off unless you turn them on. If Resolume closes while
+Datamosh is working on a frame, the next time it starts the Licence field asks
+once: type "send" to send a report, or "discard". Type "always send" to send
+reports without being asked, and "reports off" to stop. A report never
+contains your licence key, email address, name or anything from your
+composition; README.txt in the licence folder shows exactly what it holds.
+
+
 Documentation
 -------------
 
@@ -103,8 +123,9 @@ https://datamosh.letissier.ie
 Status
 ------
 
-This is a pre-release. Everything in it is verified by an automated test suite
-against synthetic footage, and it now loads and runs in Resolume -- the smoke
-test passes on a real host. The rest of the pass has not been done, and the
-tuning defaults have never been judged against real footage. Treat it as something to
-try, not something to put in a show without rehearsing it first.
+Version 1.0.0 is the first release sold with a licence. Everything in it is
+verified by an automated test suite against synthetic footage, and it loads
+and runs in Resolume -- the smoke test passes on a real host. The full pass
+(aesthetic sweeps, a long soak, the mixer in depth) has not been done, and the
+tuning defaults have never been judged against real footage. Rehearse with it
+before you put it in a show.

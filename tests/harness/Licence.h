@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <functional>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -73,6 +74,9 @@ public:
 		std::string                                    path;
 		std::string                                    body;
 		std::map< std::string, licence::json::Value > fields;
+		/// What the caller asked of the transport: the reports ask for an 8 s
+		/// timeout and a User-Agent; the licence calls ask for nothing.
+		licence::PostOptions                           options;
 	};
 
 	using Handler = std::function< licence::HttpResponse( const Request& ) >;
@@ -83,6 +87,8 @@ public:
 	}
 
 	licence::HttpResponse Post( const std::string& path, const std::string& jsonBody ) override;
+	licence::HttpResponse Post( const std::string& path, const std::string& jsonBody,
+	                            const licence::PostOptions& options ) override;
 
 	std::vector< Request > requests;
 
@@ -106,6 +112,8 @@ struct TestLicence
 
 	std::unique_ptr< licence::Service > service;
 	FakeServer*                        server = nullptr;
+	/// Every URL the service asked the platform to open in a browser.
+	std::shared_ptr< std::vector< std::string > > opened = std::make_shared< std::vector< std::string > >();
 	std::string                        fingerprint;
 	std::string                        machineHash;
 };

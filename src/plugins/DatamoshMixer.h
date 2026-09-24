@@ -54,6 +54,8 @@ public:
 	}
 
 protected:
+	const char* BinaryName() const override { return "DatamoshTransplant"; }
+
 	bool GatherInputs( ProcessOpenGLStruct* pGL, FrameInputs& inputs ) override
 	{
 		if( pGL->numInputTextures < 2 )

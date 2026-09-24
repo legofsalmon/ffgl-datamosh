@@ -77,6 +77,9 @@ void GpuProfiler::Release()
 
 void GpuProfiler::Begin( Pass pass )
 {
+	if( breadcrumb )
+		breadcrumb->Stage( PassName( pass ) );
+
 	if( !enabled )
 		return;
 

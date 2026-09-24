@@ -76,7 +76,21 @@ class WinHttpTransport : public Transport
 public:
 	HttpResponse Post( const std::string& path, const std::string& jsonBody ) override
 	{
+		return Post( path, jsonBody, PostOptions{} );
+	}
+
+	HttpResponse Post( const std::string& path, const std::string& jsonBody, const PostOptions& options ) override
+	{
 		HttpResponse response;
+
+		const ServiceAddress address = ParseServiceUrl( ServiceUrl() );
+		if( !address.valid )
+		{
+			response.error = "bad service URL";
+			return response;
+		}
+		const std::wstring agent =
+			options.userAgent.empty() ? std::wstring( L"Datamosh/" DATAMOSH_VERSION ) : Wide( options.userAgent );
 
 		// Automatic proxy discovery exists from Windows 8.1; before that, the
 		// configured default proxy is the best available.
@@ -85,28 +99,36 @@ public:
 #else
 		const DWORD access = WINHTTP_ACCESS_TYPE_DEFAULT_PROXY;
 #endif
-		Handle session( WinHttpOpen( L"Datamosh/" DATAMOSH_VERSION, access, WINHTTP_NO_PROXY_NAME,
-		                             WINHTTP_NO_PROXY_BYPASS, 0 ) );
+		Handle session( WinHttpOpen( agent.c_str(), access, WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0 ) );
 		if( !session )
 		{
 			response.error = LastError( "WinHttpOpen" );
 			return response;
 		}
 		// Resolve, connect, send, receive: all bounded, so a dead network costs
-		// the worker thread fifteen seconds and nothing else.
-		WinHttpSetTimeouts( session.value, 10000, 10000, 15000, 15000 );
+		// the worker thread fifteen seconds and nothing else. WinHTTP bounds
+		// each phase rather than the whole, so a caller's budget is split
+		// across the four and their sum is the budget.
+		if( options.timeoutSeconds > 0 )
+		{
+			const int total = options.timeoutSeconds * 1000;
+			WinHttpSetTimeouts( session.value, total / 8, total / 8, total / 4, total / 2 );
+		}
+		else
+			WinHttpSetTimeouts( session.value, 10000, 10000, 15000, 15000 );
 
-		Handle connection( WinHttpConnect( session.value, L"letissier.ie", INTERNET_DEFAULT_HTTPS_PORT, 0 ) );
+		const std::wstring host = Wide( address.host );
+		Handle connection( WinHttpConnect( session.value, host.c_str(), static_cast< INTERNET_PORT >( address.port ), 0 ) );
 		if( !connection )
 		{
 			response.error = LastError( "WinHttpConnect" );
 			return response;
 		}
 
-		const std::wstring widePath = Wide( path );
+		const std::wstring widePath = Wide( address.basePath + path );
 		Handle             request( WinHttpOpenRequest( connection.value, L"POST", widePath.c_str(), nullptr,
 		                                                WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES,
-		                                                WINHTTP_FLAG_SECURE ) );
+		                                                address.secure ? WINHTTP_FLAG_SECURE : 0 ) );
 		if( !request )
 		{
 			response.error = LastError( "WinHttpOpenRequest" );
@@ -203,12 +225,13 @@ std::filesystem::path Directory()
 	return base / L"LeTissier" / L"Datamosh";
 }
 
-bool OpenFolder( const std::filesystem::path& folder )
+bool Explore( const std::wstring& target )
 {
 	// Explorer as a process rather than ShellExecute, which wants COM
 	// initialised on the calling thread — this is a worker thread in a host's
-	// process, and COM apartment state is not ours to set there.
-	std::wstring command = L"explorer.exe \"" + folder.wstring() + L"\"";
+	// process, and COM apartment state is not ours to set there. Handed a
+	// folder it opens it; handed an http(s) URL it opens the default browser.
+	std::wstring command = L"explorer.exe \"" + target + L"\"";
 	STARTUPINFOW         startup{};
 	startup.cb = sizeof( startup );
 	PROCESS_INFORMATION process{};
@@ -218,6 +241,41 @@ bool OpenFolder( const std::filesystem::path& folder )
 	CloseHandle( process.hThread );
 	CloseHandle( process.hProcess );
 	return true;
+}
+
+bool OpenFolder( const std::filesystem::path& folder )
+{
+	return Explore( folder.wstring() );
+}
+
+bool OpenUrl( const std::string& url )
+{
+	// Only ever the service's own feedback page. Nothing with a quote in it,
+	// which is all it would take to add an argument to the command line.
+	if( ( url.rfind( "https://", 0 ) != 0 && url.rfind( "http://", 0 ) != 0 ) ||
+	    url.find_first_of( "\"\r\n" ) != std::string::npos )
+		return false;
+	return Explore( Wide( url ) );
+}
+
+std::string OsVersion()
+{
+	// RtlGetVersion rather than GetVersionEx, which reports 6.2 to any
+	// process without a manifest saying otherwise — and that is the host's
+	// manifest, not ours.
+	using RtlGetVersionFunction = LONG( WINAPI* )( PRTL_OSVERSIONINFOW );
+	HMODULE ntdll = GetModuleHandleW( L"ntdll.dll" );
+	if( !ntdll )
+		return {};
+	auto getVersion = reinterpret_cast< RtlGetVersionFunction >( GetProcAddress( ntdll, "RtlGetVersion" ) );
+	if( !getVersion )
+		return {};
+	RTL_OSVERSIONINFOW info{};
+	info.dwOSVersionInfoSize = sizeof( info );
+	if( getVersion( &info ) != 0 )
+		return {};
+	return std::to_string( info.dwMajorVersion ) + "." + std::to_string( info.dwMinorVersion ) + "." +
+	       std::to_string( info.dwBuildNumber );
 }
 
 std::string ComputerName()
@@ -231,6 +289,11 @@ std::string ComputerName()
 
 }  // namespace
 
+std::filesystem::path PlatformDirectory()
+{
+	return Directory();
+}
+
 std::unique_ptr< Transport > MakePlatformTransport()
 {
 	return std::make_unique< WinHttpTransport >();
@@ -243,6 +306,8 @@ Environment PlatformEnvironment()
 	environment.fingerprint  = MachineGuid();
 	environment.transport    = MakePlatformTransport();
 	environment.openFolder   = OpenFolder;
+	environment.openUrl      = OpenUrl;
+	environment.osVersion    = OsVersion();
 	environment.machineLabel = ComputerName();
 	return environment;
 }

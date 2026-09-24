@@ -11,6 +11,7 @@
 
 #include <dlfcn.h>
 #include <spawn.h>
+#include <sys/sysctl.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -25,11 +26,23 @@ class UrlSessionTransport : public Transport
 public:
 	HttpResponse Post( const std::string& path, const std::string& jsonBody ) override
 	{
+		return Post( path, jsonBody, PostOptions{} );
+	}
+
+	HttpResponse Post( const std::string& path, const std::string& jsonBody, const PostOptions& options ) override
+	{
 		@autoreleasepool
 		{
 			HttpResponse response;
 
-			NSString* address = [NSString stringWithFormat:@"%s%s", SERVICE_URL, path.c_str()];
+			// The licence calls keep the long default; a report asks for 8 s,
+			// and that is the whole request, not each phase of it.
+			const double timeout = options.timeoutSeconds > 0 ? options.timeoutSeconds : 15.0;
+			const double resource = options.timeoutSeconds > 0 ? options.timeoutSeconds : 20.0;
+			const double wait     = options.timeoutSeconds > 0 ? options.timeoutSeconds + 2.0 : 25.0;
+
+			const std::string base = ServiceUrl();
+			NSString* address = [NSString stringWithFormat:@"%s%s", base.c_str(), path.c_str()];
 			NSURL*    url     = [NSURL URLWithString:address];
 			if( url == nil )
 			{
@@ -40,17 +53,20 @@ public:
 			NSMutableURLRequest* request =
 				[NSMutableURLRequest requestWithURL:url
 				                        cachePolicy:NSURLRequestReloadIgnoringLocalCacheData
-				                    timeoutInterval:15.0];
+				                    timeoutInterval:timeout];
 			request.HTTPMethod = @"POST";
 			[request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
 			[request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+			if( !options.userAgent.empty() )
+				[request setValue:[NSString stringWithUTF8String:options.userAgent.c_str()]
+				    forHTTPHeaderField:@"User-Agent"];
 			request.HTTPBody = [NSData dataWithBytes:jsonBody.data() length:jsonBody.size()];
 
 			// Ephemeral: no cookies, no cache, nothing written to disk on the
 			// host application's behalf.
 			NSURLSessionConfiguration* configuration = [NSURLSessionConfiguration ephemeralSessionConfiguration];
-			configuration.timeoutIntervalForRequest  = 15.0;
-			configuration.timeoutIntervalForResource = 20.0;
+			configuration.timeoutIntervalForRequest  = timeout;
+			configuration.timeoutIntervalForResource = resource;
 			NSURLSession* session = [NSURLSession sessionWithConfiguration:configuration];
 
 			// __block storage lives on the heap once the block is copied, so the
@@ -77,7 +93,7 @@ public:
 			[task resume];
 
 			const long timedOut =
-				dispatch_semaphore_wait( done, dispatch_time( DISPATCH_TIME_NOW, 25 * NSEC_PER_SEC ) );
+				dispatch_semaphore_wait( done, dispatch_time( DISPATCH_TIME_NOW, static_cast< int64_t >( wait * NSEC_PER_SEC ) ) );
 			[session finishTasksAndInvalidate];
 
 			if( timedOut != 0 )
@@ -144,12 +160,12 @@ std::filesystem::path Directory()
 	}
 }
 
-bool OpenFolder( const std::filesystem::path& folder )
+bool Open( const std::string& target )
 {
 	// /usr/bin/open rather than NSWorkspace, whose thread-safety from a
 	// background thread inside someone else's application is not ours to lean
-	// on.
-	const std::string target = folder.string();
+	// on. The same command opens a folder in Finder and a URL in the default
+	// browser.
 	char              open[] = "/usr/bin/open";
 	char*             argv[] = { open, const_cast< char* >( target.c_str() ), nullptr };
 	pid_t             child  = 0;
@@ -158,6 +174,29 @@ bool OpenFolder( const std::filesystem::path& folder )
 	int status = 0;
 	waitpid( child, &status, 0 );
 	return WIFEXITED( status ) && WEXITSTATUS( status ) == 0;
+}
+
+bool OpenFolder( const std::filesystem::path& folder )
+{
+	return Open( folder.string() );
+}
+
+bool OpenUrl( const std::string& url )
+{
+	// Only ever the service's own feedback page; refusing anything else keeps
+	// this from being a way to launch arbitrary things from a text field.
+	if( url.rfind( "https://", 0 ) != 0 && url.rfind( "http://", 0 ) != 0 )
+		return false;
+	return Open( url );
+}
+
+std::string OsVersion()
+{
+	char   buffer[ 64 ] = {};
+	size_t size         = sizeof( buffer ) - 1;
+	if( sysctlbyname( "kern.osproductversion", buffer, &size, nullptr, 0 ) != 0 )
+		return {};
+	return buffer;
 }
 
 std::string HostName()
@@ -175,6 +214,11 @@ std::string HostName()
 
 }  // namespace
 
+std::filesystem::path PlatformDirectory()
+{
+	return Directory();
+}
+
 std::unique_ptr< Transport > MakePlatformTransport()
 {
 	return std::make_unique< UrlSessionTransport >();
@@ -187,6 +231,8 @@ Environment PlatformEnvironment()
 	environment.fingerprint  = PlatformUuid();
 	environment.transport    = MakePlatformTransport();
 	environment.openFolder   = OpenFolder;
+	environment.openUrl      = OpenUrl;
+	environment.osVersion    = OsVersion();
 	environment.machineLabel = HostName();
 	return environment;
 }

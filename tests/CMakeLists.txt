@@ -31,6 +31,7 @@ add_executable( datamosh_tests
     test_pipeline.cpp
     test_plugin.cpp
     test_licence.cpp
+    test_reports.cpp
     benchmark.cpp
     harness/GLContext.h   harness/GLContext.cpp
     harness/Synthetic.h   harness/Synthetic.cpp

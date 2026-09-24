@@ -195,6 +195,31 @@ Input Classify( const std::string& typed )
 		input.kind = InputKind::CheckIn;
 		return input;
 	}
+	if( command == "feedback" || command == "send feedback" )
+	{
+		input.kind = InputKind::Feedback;
+		return input;
+	}
+	if( command == "send" || command == "send report" || command == "send reports" || command == "yes" )
+	{
+		input.kind = InputKind::SendReports;
+		return input;
+	}
+	if( command == "discard" || command == "don't send" || command == "dont send" || command == "no" )
+	{
+		input.kind = InputKind::DiscardReports;
+		return input;
+	}
+	if( command == "always send" || command == "reports on" || command == "crash reports on" )
+	{
+		input.kind = InputKind::ReportsOn;
+		return input;
+	}
+	if( command == "reports off" || command == "crash reports off" || command == "never send" )
+	{
+		input.kind = InputKind::ReportsOff;
+		return input;
+	}
 
 	// An email starts a trial. Loose on purpose: the service validates it and
 	// says so in its own words.

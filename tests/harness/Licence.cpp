@@ -1,5 +1,6 @@
 #include "Licence.h"
 
+#include <CrashMarks.h>
 #include <Runtime.h>
 #include <monocypher-ed25519.h>
 #include <sdk/licence.hpp>
@@ -139,7 +140,13 @@ std::string MintToken( const TokenSpec& spec )
 
 licence::HttpResponse FakeServer::Post( const std::string& path, const std::string& jsonBody )
 {
-	Request request{ path, jsonBody, licence::json::ParseObject( jsonBody ) };
+	return Post( path, jsonBody, licence::PostOptions{} );
+}
+
+licence::HttpResponse FakeServer::Post( const std::string& path, const std::string& jsonBody,
+                                        const licence::PostOptions& options )
+{
+	Request request{ path, jsonBody, licence::json::ParseObject( jsonBody ), options };
 	requests.push_back( request );
 	if( !handler )
 		return Unreachable();
@@ -174,18 +181,27 @@ TestLicence::TestLicence( const fs::path& folder, licence::Policy policy, Clock&
 	settings.product   = std::move( product );
 	settings.buildDate = clock.now - 86400;
 	settings.now       = [ &clock ] { return clock.now; };
+	// Deterministic: the only live process is this one, so a marker with any
+	// other id is a process that has gone.
+	settings.processAlive = []( std::uint32_t pid ) { return pid == licence::crash::CurrentPid(); };
 
 	auto transport = std::make_unique< FakeServer >( std::move( handler ) );
 	server         = transport.get();
 
 	auto shared = std::make_shared< std::unique_ptr< FakeServer > >( std::move( transport ) );
+	auto urls = opened;
 	service     = std::make_unique< licence::Service >(
-        settings, [ folder, fingerprint = fingerprint, shared ] {
+        settings, [ folder, fingerprint = fingerprint, shared, urls ] {
             licence::Environment environment;
             environment.directory    = folder;
             environment.fingerprint  = fingerprint;
             environment.transport    = std::move( *shared );
             environment.machineLabel = "test rig";
+            environment.osVersion    = "14.6";
+            environment.openUrl      = [ urls ]( const std::string& url ) {
+                urls->push_back( url );
+                return true;
+            };
             return environment;
         } );
 }
