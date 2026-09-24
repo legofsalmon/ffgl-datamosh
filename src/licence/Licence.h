@@ -180,6 +180,11 @@ enum class InputKind
 	Folder,        ///< open the licence folder
 	Deactivate,    ///< release this machine's seat and forget the licence
 	CheckIn,       ///< check in now
+	Feedback,      ///< open the feedback page in the browser
+	SendReports,   ///< "send": the waiting crash report, this once
+	DiscardReports,///< "discard": not this one
+	ReportsOn,     ///< "always send" / "reports on": automatic crash reports
+	ReportsOff,    ///< "reports off"
 	Unrecognised,
 };
 

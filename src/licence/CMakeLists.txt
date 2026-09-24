@@ -14,6 +14,8 @@ add_library( datamosh_licence OBJECT
     Store.h           Store.cpp
     Service.h         Service.cpp
     Runtime.h         Runtime.cpp
+    CrashMarks.h      CrashMarks.cpp
+    Reports.h         Reports.cpp
     Platform.h
     "${MONOCYPHER_ROOT}/monocypher.c"
     "${MONOCYPHER_ROOT}/monocypher-ed25519.c"
@@ -37,6 +39,8 @@ else()
 endif()
 
 target_include_directories( datamosh_licence PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}" )
+# Breadcrumb.h, the render-side half of the crash marker, lives with the core.
+target_include_directories( datamosh_licence PUBLIC "${CMAKE_SOURCE_DIR}/src/core" )
 # PUBLIC so the tests can sign their own tokens with Monocypher.
 target_include_directories( datamosh_licence SYSTEM PUBLIC "${MONOCYPHER_ROOT}" )
 

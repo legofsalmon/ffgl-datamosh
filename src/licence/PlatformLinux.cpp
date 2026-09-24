@@ -9,6 +9,7 @@
 #include <dlfcn.h>
 #include <fstream>
 #include <sstream>
+#include <sys/utsname.h>
 #include <unistd.h>
 
 namespace datamosh::licence {
@@ -57,6 +58,11 @@ std::filesystem::path Directory()
 
 }  // namespace
 
+std::filesystem::path PlatformDirectory()
+{
+	return Directory();
+}
+
 std::unique_ptr< Transport > MakePlatformTransport()
 {
 	return std::make_unique< NoTransport >();
@@ -68,6 +74,9 @@ Environment PlatformEnvironment()
 	environment.directory   = Directory();
 	environment.fingerprint = ReadMachineId();
 	environment.transport   = MakePlatformTransport();
+	struct utsname system{};
+	if( uname( &system ) == 0 )
+		environment.osVersion = system.release;
 	char host[ 256 ]        = {};
 	if( gethostname( host, sizeof( host ) - 1 ) == 0 )
 		environment.machineLabel = host;

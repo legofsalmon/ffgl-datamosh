@@ -1,6 +1,9 @@
 #include "Service.h"
 
+#include "CrashMarks.h"
+
 #include <chrono>
+#include <cstdlib>
 #include <ctime>
 #include <sstream>
 
@@ -68,6 +71,22 @@ void Service::Submit( std::string typed )
 	wake.notify_one();
 }
 
+void Service::ReportCaught( const char* where, const char* what ) noexcept
+{
+	try
+	{
+		std::unique_lock< std::mutex > lock( mutex, std::try_to_lock );
+		if( !lock.owns_lock() || caught.size() >= 8 )
+			return;
+		caught.emplace_back( where ? where : "?", what ? what : "?" );
+	}
+	catch( ... )
+	{
+		// Out of memory while reporting that something ran out of memory. The
+		// log line is already out; this report is not worth a second failure.
+	}
+}
+
 void Service::WaitForWork( std::chrono::milliseconds timeout )
 {
 	std::unique_lock< std::mutex > lock( mutex );
@@ -98,6 +117,34 @@ void Service::Resolve()
 	store->Ensure();
 	if( !environment.fingerprint.empty() )
 		localHash = letissier::machine_hash( environment.fingerprint );
+
+	// Crash reports ride on the same worker, folder and transport. With no
+	// folder (the tests' default service) the reporter is inert.
+	reports::Reporter::Config config;
+	if( !environment.directory.empty() )
+	{
+		config.folder        = environment.directory / "reports";
+		config.installIdFile = environment.directory / "install-id";
+	}
+	config.binary      = settings.binary;
+	config.version     = settings.version;
+	config.osVersion   = environment.osVersion;
+	config.self        = settings.pid != 0 ? settings.pid : crash::CurrentPid();
+	config.alive       = settings.processAlive ? settings.processAlive : crash::ProcessAlive;
+	config.now         = [ this ] { return Now(); };
+	config.serviceBase = ServiceUrl();
+#if defined( _WIN32 )
+	const char* home = std::getenv( "USERPROFILE" );
+	const char* user = std::getenv( "USERNAME" );
+#else
+	const char* home = std::getenv( "HOME" );
+	const char* user = std::getenv( "USER" );
+#endif
+	config.home = home ? home : "";
+	config.user = user ? user : "";
+	reporter    = std::make_unique< reports::Reporter >( std::move( config ), environment.transport.get(),
+                                                         environment.openUrl );
+	reporter->Start();
 }
 
 void Service::Pump()
@@ -123,6 +170,16 @@ void Service::Pump()
 	ImportDropFile();
 	Decide( false );
 	MaybeCheckIn();
+
+	std::deque< std::pair< std::string, std::string > > problems;
+	{
+		std::lock_guard< std::mutex > lock( mutex );
+		problems.swap( caught );
+	}
+	for( const auto& problem : problems )
+		reporter->Caught( problem.first, problem.second );
+	reporter->Pump();
+
 	Publish();
 }
 
@@ -162,6 +219,29 @@ void Service::HandleInput( const Input& input )
 		return;
 	case InputKind::CheckIn:
 		CheckIn( true );
+		return;
+	case InputKind::Feedback:
+		notice.clear();
+		if( !reporter->OpenFeedback() )
+			notice = reporter->Notice();
+		return;
+	case InputKind::SendReports:
+		reporter->Send();
+		reporter->Pump();
+		notice = reporter->Notice();
+		return;
+	case InputKind::DiscardReports:
+		reporter->Discard();
+		notice = reporter->Notice();
+		return;
+	case InputKind::ReportsOn:
+		reporter->SetAutomatic( true );
+		reporter->Pump();
+		notice = reporter->Notice();
+		return;
+	case InputKind::ReportsOff:
+		reporter->SetAutomatic( false );
+		notice = reporter->Notice();
 		return;
 	case InputKind::Unrecognised:
 		notice = "type a key, an email for a trial, or \"folder\"";
@@ -524,6 +604,14 @@ void Service::Publish()
 		// the answer to something typed, which stays up until the next input.
 		if( next.restriction == Restriction::Lock )
 			text = "locked, " + text;
+
+		// The one-time question after a problem. A plugin has no dialog to
+		// ask it in; the field's name is the only thing it can put in front
+		// of someone, and it is where they answer. It goes when they do, or
+		// when Resolume next starts — asked once, and unanswered is "no".
+		if( reporter && reporter->Asking() )
+			text += reporter->AskingAboutACrash() ? " | closed unexpectedly last time - type send or discard"
+			                                      : " | a problem was caught - type send or discard";
 	}
 	const std::string nextLabel = "Licence: " + text;
 
@@ -588,6 +676,9 @@ std::string Service::ComposeReadme() const
 	if( !transportProblem.empty() )
 		out << "\nThe licence service was last unreachable: " << transportProblem
 		    << "\n(That never restricts anything; the saved licence keeps working.)\n";
+
+	if( reporter )
+		out << "\n" << reporter->Describe();
 
 	out << "\nRequest code (for offline activation):\n"
 	    << "    " << ( environment.fingerprint.empty() ? "(this computer's id could not be read)"

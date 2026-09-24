@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -93,7 +94,7 @@ class DatamoshPlugin : public HostBase
 {
 public:
 	DatamoshPlugin();
-	~DatamoshPlugin() override = default;
+	~DatamoshPlugin() override;
 
 	// Every host entry point that runs our code or allocates is guarded: no
 	// C++ exception may cross plugMain's C boundary into the host, because an
@@ -118,6 +119,9 @@ public:
 	unsigned int CaughtErrors() const { return caughtErrors; }
 
 protected:
+	/// "Datamosh" or "DatamoshTransplant": names this binary's crash marker.
+	virtual const char* BinaryName() const = 0;
+
 	/// The unguarded bodies. Only the guarded overrides above call these.
 	FFResult RenderFrame( ProcessOpenGLStruct* pGL, FrameInputs& inputs, bool& gathered );
 	FFResult InitGLUnguarded( const FFGLViewportStruct* viewPort );
@@ -135,6 +139,21 @@ protected:
 	void NoteCaught( const char* where, const char* what ) noexcept;
 
 	unsigned int caughtErrors = 0;
+
+	/// This instance's slot in the crash marker (src/licence/CrashMarks.h).
+	/// Unbound when there is no marker, which makes every write a no-op.
+	Breadcrumb   breadcrumb;
+	/// Every slot was taken (64 instances of one binary): stop asking.
+	bool         breadcrumbGaveUp = false;
+
+	/// The Send Feedback button.
+	unsigned int feedbackParamIndex = 0xFFFFFFFFu;
+	bool         feedbackDown       = false;
+	/// When this instance was made. A press in the first moments of an
+	/// instance's life is a composition being restored, not a person, and it
+	/// must not open a browser over a show that is loading.
+	std::chrono::steady_clock::time_point createdAt = std::chrono::steady_clock::now();
+	static constexpr std::chrono::seconds FEEDBACK_SETTLE{ 3 };
 	/// The licence mark the last frame was drawn with, so the fallback
 	/// passthrough after a caught exception carries the same band.
 	Watermark    lastMark     = Watermark::None;
@@ -268,6 +287,14 @@ template< typename HostBase >
 DatamoshPlugin< HostBase >::DatamoshPlugin() :
 	HostBase()
 {
+}
+
+template< typename HostBase >
+DatamoshPlugin< HostBase >::~DatamoshPlugin()
+{
+	// Gives the crash-marker slot back: an instance that is gone cannot have
+	// died mid-frame.
+	licence::ReleaseBreadcrumb( breadcrumb.Bound() );
 }
 
 /// The preset styles offered by the Style dropdown, in dropdown order.
@@ -445,6 +472,17 @@ void DatamoshPlugin< HostBase >::DeclareCommonParams()
 	AddGrouped( "View", ParamOption::Create( "View",
 	                                           { { "Result", 0.0f }, { "Motion", 1.0f }, { "Gate", 2.0f } },
 	                                           0 ) );
+
+	// Opens the feedback page in the browser. A plugin has no window to hold
+	// a form, so the form is the site's, with the product and version filled
+	// in; the licence worker opens it, never the thread that pressed it.
+	//
+	// Appended, and before Licence only because Licence has been the last
+	// parameter since it was added — both are new in 1.0.0, so no saved
+	// composition has either at a different index. Its own group for the
+	// reason Spread and View have theirs.
+	feedbackParamIndex = static_cast< unsigned int >( this->params.size() );
+	AddGrouped( "Help", ParamTrigger::Create( "Send Feedback" ) );
 
 	// Last, like everything added after the first release, and in a group of
 	// its own for the reason Spread and View have theirs.
@@ -703,6 +741,16 @@ FFResult DatamoshPlugin< HostBase >::SetFloatParameterUnguarded( unsigned int in
 		}
 	}
 
+	if( index == feedbackParamIndex && feedbackParamIndex != NO_PARAM )
+	{
+		// On the press, not the release, and not while a composition is being
+		// restored into a new instance.
+		const bool down = value > 0.5f;
+		if( down && !feedbackDown && std::chrono::steady_clock::now() - createdAt >= FEEDBACK_SETTLE )
+			licence::OpenFeedback();
+		feedbackDown = down;
+	}
+
 	const FFResult result = HostBase::SetFloatParameter( index, value );
 
 	// Auto Mode is not style-managed, so this sits above the style logic and
@@ -848,6 +896,9 @@ void DatamoshPlugin< HostBase >::SetHostInfo( const char* hostname, const char* 
 		// The SDK assigns both into std::strings, and a null char* there is
 		// undefined behaviour rather than an exception anything could catch.
 		HostBase::SetHostInfo( hostname ? hostname : "", version ? version : "" );
+		// "Resolume Arena 7.22.1" in a crash report is the difference between
+		// a reproducible bug and a guess.
+		licence::NoteHost( hostname, version );
 	}
 	DATAMOSH_CATCH_ALL( "SetHostInfo" )
 }
@@ -868,6 +919,12 @@ void DatamoshPlugin< HostBase >::NoteCaught( const char* where, const char* what
 	++caughtErrors;
 	const unsigned int total = ++CaughtErrorsInProcess();
 
+	// For a crash report — which goes nowhere unless the person has said it
+	// may. Every time, because a different failure can arrive between the
+	// logged ones; the worker keeps one report per distinct failure, and the
+	// hand-off never waits for a lock.
+	licence::ReportCaught( where, what );
+
 	// The first, then the 2nd, 4th, 8th... A failure on every frame is sixty
 	// lines a second, and the log is where the operator goes to find out why
 	// the effect stopped — it has to still be readable when they get there.
@@ -886,6 +943,7 @@ void DatamoshPlugin< HostBase >::NoteCaught( const char* where, const char* what
 	{
 		// A host log callback that throws has nowhere left to report to.
 	}
+
 }
 
 template< typename HostBase >
@@ -1002,6 +1060,15 @@ FFResult DatamoshPlugin< HostBase >::InitGL( const FFGLViewportStruct* viewPort 
 template< typename HostBase >
 FFResult DatamoshPlugin< HostBase >::InitGLUnguarded( const FFGLViewportStruct* viewPort )
 {
+	// The breadcrumb is claimed on a frame, once the worker has mapped the
+	// crash marker; until then every write to it is a no-op. A second InitGL
+	// on the same instance (a context change) is covered; the very first is
+	// not, because creating the file here would be disk I/O on the host's
+	// render thread.
+	licence::NameBinary( BinaryName() );
+	pipeline.SetBreadcrumb( &breadcrumb );
+	ScopedBreadcrumb inside( breadcrumb, "init-gl" );
+
 	// Deliberately not calling HostBase::InitGL. The quickstart base synthesises
 	// and compiles a fragment shader from the parameter names, which this plugin
 	// never draws with — it runs its own multi-pass graph. Skipping it also frees
@@ -1028,6 +1095,7 @@ FFResult DatamoshPlugin< HostBase >::DeInitGL()
 {
 	try
 	{
+		ScopedBreadcrumb inside( breadcrumb, "deinit-gl" );
 		pipeline.Release();
 	}
 	DATAMOSH_CATCH_ALL( "DeInitGL" )
@@ -1053,6 +1121,20 @@ FFResult DatamoshPlugin< HostBase >::ProcessOpenGL( ProcessOpenGLStruct* pGL )
 {
 	if( pGL == nullptr )
 		return FF_FAIL;
+
+	// A slot in the crash marker, once the worker has mapped it: a flag
+	// exchange in memory, tried until it succeeds or the marker is full.
+	if( !breadcrumb.Bound() && !breadcrumbGaveUp )
+	{
+		if( BreadcrumbSlot* slot = licence::ClaimBreadcrumb() )
+			breadcrumb.Bind( slot );
+		else if( licence::CrashMarkerOpen() )
+			breadcrumbGaveUp = true;
+	}
+
+	// Set from here until the call returns, whichever way it returns. If the
+	// process dies in between, the next load finds it still set.
+	ScopedBreadcrumb inside( breadcrumb, "frame" );
 
 	FrameInputs inputs;
 	bool        gathered = false;
@@ -1099,6 +1181,7 @@ FFResult DatamoshPlugin< HostBase >::RenderFrame( ProcessOpenGLStruct* pGL, Fram
 	if( !GatherInputs( pGL, inputs ) )
 		return FF_FAIL;
 	gathered = true;
+	breadcrumb.Rendered( static_cast< std::uint32_t >( inputs.width ), static_cast< std::uint32_t >( inputs.height ) );
 
 	if( gate.restriction == licence::Restriction::Lock )
 	{

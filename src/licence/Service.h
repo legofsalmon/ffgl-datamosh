@@ -8,6 +8,7 @@
 // by hand, with a stand-in transport and a temporary folder.
 
 #include "Licence.h"
+#include "Reports.h"
 #include "Store.h"
 #include "Wire.h"
 
@@ -35,6 +36,10 @@ struct Environment
 	std::unique_ptr< Transport > transport;
 	/// Opens the licence folder in Finder or Explorer. Optional.
 	std::function< bool( const std::filesystem::path& ) > openFolder;
+	/// Opens an http(s) URL in the default browser. Optional.
+	std::function< bool( const std::string& ) > openUrl;
+	/// The OS release, for crash reports ("14.6", "10.0.22631"). Optional.
+	std::string                 osVersion;
 	/// Sent as the activation's `label`, so the account page can tell machines apart.
 	std::string                 machineLabel;
 };
@@ -46,6 +51,13 @@ struct Settings
 	std::int64_t buildDate = BuildDate();
 	Policy       policy    = POLICY;
 	std::function< std::int64_t() > now;
+	/// Which plugin binary this is, for crash reports and their markers.
+	std::string  binary    = "Datamosh";
+	std::string  version   = DATAMOSH_VERSION;
+	/// Whether a process that left a crash marker is still running. Tests
+	/// stand in for it; the default asks the operating system.
+	std::function< bool( std::uint32_t ) > processAlive;
+	std::uint32_t pid      = 0;  ///< 0: this process
 
 	/// The launch check-in waits this long, so it never competes with a
 	/// composition loading. Then daily; an unreachable service is retried hourly.
@@ -68,6 +80,12 @@ public:
 	/// Queues what was typed into the Licence field. Any thread; never blocks
 	/// on I/O. The worker picks it up on its next pump.
 	void Submit( std::string typed );
+
+	/// An exception caught at the FFGL boundary, for a crash report. Any
+	/// thread, the render thread included: it never waits for the lock, and
+	/// a report that cannot be queued this instant is dropped rather than
+	/// made to cost a frame. The log line has already been written.
+	void ReportCaught( const char* where, const char* what ) noexcept;
 
 	/// One round of work: resolve the platform on first call, handle typed
 	/// input, import a dropped token, re-read the files if they changed, check
@@ -92,6 +110,7 @@ public:
 	Status       CurrentStatus() const { return verdict.status; }
 	std::string  Notice() const { return notice; }
 	const Store* GetStore() const { return store.get(); }
+	const reports::Reporter* GetReporter() const { return reporter.get(); }
 	/// The service's hash of this machine, as a token names it.
 	const std::string& MachineHash() const { return localHash; }
 
@@ -130,6 +149,7 @@ private:
 	bool                    resolved = false;
 	Environment             environment;
 	std::unique_ptr< Store > store;
+	std::unique_ptr< reports::Reporter > reporter;
 	std::string             localHash;
 	Verdict                 verdict;
 	bool                    hasToken        = false;
@@ -152,6 +172,7 @@ private:
 	mutable std::mutex              mutex;
 	std::condition_variable         wake;
 	std::deque< std::string >       pending;
+	std::deque< std::pair< std::string, std::string > > caught;
 	std::string                     label = "Licence";
 	std::atomic< std::uint32_t >    gate{ 0 };
 	std::atomic< std::uint32_t >    generation{ 0 };

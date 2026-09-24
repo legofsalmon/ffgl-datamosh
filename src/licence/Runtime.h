@@ -13,7 +13,10 @@
 
 #include "Licence.h"
 
+#include <Breadcrumb.h>
+
 #include <cstdint>
+#include <filesystem>
 #include <string>
 
 namespace datamosh::licence {
@@ -38,6 +41,31 @@ std::string CurrentLabel();
 /// Hands what was typed into the Licence field to the worker.
 void Submit( const std::string& typed );
 
+/// Names this binary ("Datamosh", "DatamoshTransplant") for its crash marker
+/// and reports. Call before Start(); the first call wins. No I/O: the worker
+/// creates the marker file (CrashMarks.h) when it starts, so the render
+/// thread never waits on the disk for it.
+void NameBinary( const char* binary );
+
+/// True once the worker has mapped this process's crash marker. One atomic
+/// load; an instance claims its breadcrumb slot on the first frame after.
+bool CrashMarkerOpen();
+
+/// A breadcrumb slot for one instance, or null when there is no marker yet
+/// or every slot is taken. Lock-free.
+BreadcrumbSlot* ClaimBreadcrumb();
+void            ReleaseBreadcrumb( BreadcrumbSlot* slot );
+/// Records the host's name and version, for the marker (now, or when the
+/// worker maps it).
+void            NoteHost( const char* name, const char* version );
+
+/// An exception caught at the FFGL boundary, for a crash report (sent only
+/// with the person's say-so). Lock-free from the caller's side; never throws.
+void ReportCaught( const char* where, const char* what ) noexcept;
+
+/// Opens the feedback page in the browser, from the worker thread.
+void OpenFeedback();
+
 namespace testing {
 
 /// Routes every call above to `service` instead of the process-wide worker,
@@ -45,6 +73,16 @@ namespace testing {
 /// installs one before its first test so that no test touches the real
 /// licence folder or the network.
 void Install( Service* service );
+
+/// Where crash markers go while a test service is installed. Empty — the
+/// default — means none are written, so no test ever touches the real
+/// licence folder.
+void SetReportsFolder( const std::filesystem::path& folder );
+
+/// Maps the crash marker under that folder, as the worker would on its own
+/// thread when it starts. The test service has no worker, so a test that
+/// wants a marker calls this itself.
+void OpenCrashMarker();
 
 }  // namespace testing
 
