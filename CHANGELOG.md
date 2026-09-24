@@ -6,6 +6,34 @@ Notable changes to ffgl-datamosh. Format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Licence keys, from letissier.ie.** A new last parameter, **Licence**, on both
+  plugins: type a key (`LT-DATA-...`) to activate, an email address to start a
+  trial, `folder` to open the licence folder, `check` to check in, `deactivate`
+  to release the seat. Offline activation is by request code and token, pasted
+  into the field or dropped into the folder as `activation-token.txt`. The field
+  empties on Enter and never echoes what was typed, so nothing licence-related
+  is saved into a composition; its display name shows the status.
+
+  The licence is per user and shared by both plugins —
+  `~/Library/Application Support/LeTissier/Datamosh/` and
+  `%APPDATA%\LeTissier\Datamosh\`. Tokens are Ed25519-verified locally with
+  [Monocypher](external/monocypher/README.md), vendored; its notice is added to
+  `THIRD-PARTY.txt`. All file and network work runs on one background thread:
+  nothing waits on the network at startup or on a frame, and being offline never
+  restricts anything.
+
+### Changed
+
+- **Release builds are locked without a licence or trial** ("trial, then lock").
+  A new instance with neither passes its input through untouched. Because that
+  is what a dead plugin looks like too, a locked instance names itself — the
+  Licence field reads `Licence: locked, ...` — and logs one `datamosh: locked`
+  line. Licensing unlocks running instances at once; nothing ever locks an
+  instance that is already running. The policy is one line in
+  `src/licence/Licence.h` (`Open`, `Watermark` or `Lock`).
+
 ### Fixed
 
 - **The panel showed two `Damage` sections and two `Output` sections.** Resolume

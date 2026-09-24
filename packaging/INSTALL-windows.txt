@@ -63,7 +63,28 @@ Resolume 7.3 or later, 64-bit. Parameter groups need 7.3+; on older versions
 the parameters still work but appear as one flat list.
 
 
-Documentation
+Licence
+-------
+
+Datamosh needs a licence key or a free trial. Without one, a new Datamosh
+passes video through untouched, and the last parameter's name reads
+"Licence: locked, ...".
+
+Click that Licence field, type your licence key (LT-DATA-...) or, for a
+trial, your email address, and press Enter. The field empties and its name
+changes to "Licence: active" or "Licence: trial, N days left" within a few
+seconds; effects already in the composition unlock straight away. An effect
+that is already running is never locked, online or off.
+
+Type "folder" to open the licence folder:
+
+    %APPDATA%\LeTissier\Datamosh
+
+Its README.txt has the status, and the request code for activating a
+computer that is offline.
+
+
+\Documentation
 -------------
 
 https://datamosh.letissier.ie

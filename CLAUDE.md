@@ -11,7 +11,7 @@ field. Windows and macOS.
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --parallel
-ctest --test-dir build --output-on-failure     # 57 tests, headless EGL + llvmpipe
+ctest --test-dir build --output-on-failure     # 85 tests, headless EGL + llvmpipe
 ./build/tests/datamosh_tests --profile          # per-pass GPU timing
 ```
 
@@ -77,6 +77,25 @@ bin as `fft[i] * fft[i] * gain` with `gain = 0`, and nothing in the SDK sets it.
 `DatamoshPlugin.h` calls `SetGain(0.0f)` — decibels, so that is unity. Without
 it every band reads zero forever and the audio parameters are inert with no
 symptom. This shipped broken in three releases.
+
+## Licensing
+
+`src/licence/` checks a letissier.ie licence (product `datamosh`). The policy is
+the one `POLICY` line in `src/licence/Licence.h`, and it is `Lock`: with no
+licence or trial, a new instance renders `Passthrough` untouched — the dead-plugin
+picture again, on purpose. What tells them apart is the `Licence` parameter's
+display name (`Licence: locked, ...`) and a `datamosh: locked` log line. Keep
+both if you touch that path; `ALockedInstancePassesThroughAndSaysSo` and
+`ALicensedInstanceDoesNotPassThrough` pin them.
+
+- Nothing licence-related may run file or network I/O on the render thread. The
+  worker in `Runtime.cpp` does all of it; `ProcessOpenGL` reads an atomic gate.
+- A running instance only ever loosens (`GateLatch`). Never lock a live show.
+- The test binary installs an `Open` licence before anything else
+  (`tests/main.cpp`), so pipeline tests are never locked. Licence tests build
+  their own service with a fake server and clock (`tests/harness/Licence.h`).
+- The `Licence` text field never stores or echoes what is typed, so keys and
+  emails stay out of saved compositions.
 
 ## Testing
 

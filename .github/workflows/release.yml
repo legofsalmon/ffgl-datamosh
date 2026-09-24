@@ -101,8 +101,8 @@ jobs:
             }
           }
 
-      # Both the FFGL SDK and GLEW are BSD-style and require their copyright
-      # notice to accompany binary redistribution. Generating the file from the
+      # The FFGL SDK, GLEW and Monocypher are BSD-style and require their
+      # copyright notice to accompany binary redistribution. Generating the file from the
       # licences actually in the tree keeps it honest if either dependency moves.
       - name: Stage the archive
         shell: pwsh
@@ -117,6 +117,8 @@ jobs:
           $notice += Get-Content external/ffgl/LICENSE.md -Raw
           $notice += "`n`n" + "=" * 72 + "`nGLEW - The OpenGL Extension Wrangler Library`n" + "=" * 72 + "`n`n"
           $notice += Get-Content external/ffgl/deps/glew-2.1.0/LICENSE.txt -Raw
+          $notice += "`n`n" + "=" * 72 + "`nMonocypher - Ed25519 signature check for licence tokens`n" + "=" * 72 + "`n`n"
+          $notice += Get-Content external/monocypher/LICENCE.md -Raw
           Set-Content -Path staging/THIRD-PARTY.txt -Value $notice
 
           Compress-Archive -Path staging/* -DestinationPath datamosh-windows-x64.zip
@@ -194,8 +196,8 @@ jobs:
           cp packaging/INSTALL-macos.txt staging/INSTALL.txt
           cp LICENSE staging/ 2>/dev/null || true
 
-          # The FFGL SDK is BSD-style and requires its copyright notice to
-          # accompany binary redistribution. GLEW is not listed here because
+          # The FFGL SDK and Monocypher are BSD-style and require their
+          # copyright notice to accompany binary redistribution. GLEW is not listed here because
           # macOS links the system OpenGL directly and never pulls it in.
           {
             echo "These plugins link the following third-party components."
@@ -205,6 +207,12 @@ jobs:
             printf '=%.0s' {1..72}; echo
             echo
             cat external/ffgl/LICENSE.md
+            echo
+            printf '=%.0s' {1..72}; echo
+            echo "Monocypher - Ed25519 signature check for licence tokens"
+            printf '=%.0s' {1..72}; echo
+            echo
+            cat external/monocypher/LICENCE.md
           } > staging/THIRD-PARTY.txt
           # ditto rather than zip: it preserves the bundle structure and the
           # resource forks a .bundle depends on. No --keepParent, or the build's

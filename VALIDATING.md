@@ -1,6 +1,6 @@
 # Validating a build in Resolume
 
-Everything in this project is verified by 34 automated tests against synthetic
+Everything in this project is verified by 84 automated tests against synthetic
 footage with known ground truth. None of it is verified against the actual host.
 This document is how that gap gets closed.
 
@@ -11,10 +11,12 @@ the frame gate is stuck, it is the first frame — `ProcessOpenGL` falls through
 `Passthrough`, which is literally:
 
 ```glsl
-fragColor = texture( InputTexture, uv );
+fragColor = ApplyMark( texture( InputTexture, uv ), uv );
 ```
 
-applied with the same `MaxUV` the working path uses. **A completely dead plugin
+applied with the same `MaxUV` the working path uses. (`ApplyMark` draws the
+unlicensed band under the Watermark licence policy and is an exact no-op
+otherwise.) **A completely dead plugin
 emits a pixel-exact copy of its input.** It looks like a correctly-bypassing
 effect at every resolution, on every source, at every alpha.
 
@@ -33,6 +35,17 @@ contradicts them:
    `Style → ApplyStyle → PushParam` never touches the host parameter path. A melt
    produced by picking "Melt" proves the shaders run; it does not prove Resolume
    can write a parameter.
+
+**A locked build looks the same, on purpose.** Release builds need a licence
+key or a running trial. Without one, a *new* instance is **locked**: it passes
+its input through untouched, which is pixel-for-pixel the dead-plugin picture
+above. The difference is that a locked instance says so. The last parameter,
+**Licence**, is renamed `Licence: locked, unlicensed` (or `locked, trial
+ended`), and the host log gets one `datamosh: locked - ...` line per instance.
+A dead plugin can do neither. So before scoring anything, read the Licence
+field's name: it must say `active` or `trial, N days left`. If it says
+`locked`, license it (S4b) and **delete and re-add the effect** — or just watch
+it unlock, which licensing does to running instances too.
 
 **The liveness canary.** On the instance under test: Style = Custom, Motion
 Threshold **0.0**, everything else default. Hand-drag **Mosh Amount 0 → 1**: the
@@ -223,13 +236,48 @@ Click the effect's name to open its parameters.
 returned FF_FAIL, and there are only two causes: **a shader failed to compile on
 this driver**, or the fullscreen quad could not be created. Render-target
 allocation happens later and cannot make this step fail. Shader compilation is
-the likely one: all 34 tests compile on Mesa llvmpipe, the most permissive GLSL
+the likely one: all 84 tests compile on Mesa llvmpipe, the most permissive GLSL
 front end in existence, while Apple's GL 4.1 compiler is the strictest. At risk:
 GLSL array constructors in `BlockMatch`, `isnan`/`isinf`, `textureLod` with a
 computed level, `round()`. → **triage F1**.
 
 Gate B1 passing means only that `InitGL` returned FF_SUCCESS. It says nothing
 about buffers or rendering.
+
+### S4b. The licence — **GATE L**
+
+Scroll to the bottom of the effect's parameters. The last one is a text field in
+its own **Licence** section. Read its **name** (Resolume 7.4.0+ shows plugin
+display names; on older hosts it reads just `Licence`, and the log is the only
+signal):
+
+| Name reads | Meaning |
+| --- | --- |
+| `Licence: locked, unlicensed` | Working plugin, no licence or trial on this computer. The log has `datamosh: locked - ...`. Continue below. |
+| `Licence: active` / `Licence: trial, N days left` | Licensed. Go to S5. |
+| `Licence` and nothing else, on 7.4+ | The name never updated. Note it; see whether the log has a `datamosh: locked` line. |
+
+To license it, click the field, type **your email address** (a trial) or a
+**licence key** (`LT-DATA-...`), and press Enter. Within a few seconds:
+
+- the field **empties** — it never shows what was typed;
+- its name goes `Licence: starting trial...` / `activating...`, then
+  `Licence: trial, N days left` / `active`;
+- the effect **stops passing through** without being re-added.
+
+Anything the service refuses comes back in its own words as the field's name,
+still prefixed `locked, ` while the computer is unlicensed (for example `Licence:
+locked, All 2 seats are in use.`). Offline, it reads `... offline - nothing
+changed, try again when connected` and nothing else changes.
+
+**PASS** — the name changes to active or trial and the effect is live in S5.
+**FAIL** — the name never changes (the text field may not be reaching
+`SetTextParameter`: type `folder` and see whether the licence folder opens; if it
+does, input works and the network path is the suspect). Record which.
+
+The licence is per computer and per user, so this is once per machine, not once
+per session. `folder` opens it: `~/Library/Application Support/LeTissier/Datamosh/`
+or `%APPDATA%\LeTissier\Datamosh\`, with a `README.txt` that states the status.
 
 ### S5. It renders, and the host can write a parameter — **GATE B2**
 
@@ -240,7 +288,7 @@ Watch for three seconds.
 | --- | --- |
 | Refreshing stops within a frame and the picture smears along the motion; within 2–3 s it's an abstract dragged mess, covering the **whole frame**, with no shift or zoom versus bypass | **PASS** |
 | It locks to one frozen frame and no control changes it | **FAIL — frame gate.** `SetTime` is being called with a constant. One frame advanced and none ever will. |
-| The clip keeps playing perfectly cleanly at Mosh Amount 1.0 | **FAIL — never rendered, or parameter writes aren't arriving.** Disambiguate below. |
+| The clip keeps playing perfectly cleanly at Mosh Amount 1.0 | First re-read the Licence field's name: `locked` means S4b, not a fault. Otherwise **FAIL — never rendered, or parameter writes aren't arriving.** Disambiguate below. |
 | It melts over only part of the frame, or the image shifts/zooms versus bypass | **FAIL — geometry.** `MaxUV` handling. |
 
 **Disambiguating the "perfectly clean" case, 20 seconds:** set **Style = Melt**.
@@ -340,6 +388,9 @@ S1 quarantine / MotW cleared and verified   PASS / FAIL
 S2 GATE A   effect in Effects panel         PASS / FAIL    thumbnail: colour / grey
 S3 GATE D1  mixer instantiates              PASS / FAIL    name shown: ______
 S4 GATE B1  effect stays, panel opens       PASS / FAIL
+S4b GATE L  Licence name before: __________
+            name after key/trial: _________  PASS / FAIL
+            field emptied on Enter          YES  / NO
 S5 GATE B2  hand-drag melts                 PASS / FAIL    Style-only melt? ____
 S6 Motion Gain 0 freezes moving regions     PASS / FAIL
 S7 GATE C   Burst 8.0 measured ____ s       PASS / FAIL
@@ -428,7 +479,7 @@ From FFGL.h's own changelog, so a missing feature can be told apart from a bug:
 | --- | --- |
 | Parameter groups (`SetParamGroup`) — collapsible sections | 7.3.0 |
 | Plugin logging into the host log (our `datamosh:` lines) | 7.3.1 |
-| Parameter display names | 7.4.0 |
+| Parameter display names — including the `Licence: locked` / `active` status | 7.4.0 |
 | REST API and WebSocket API | 7.8 |
 | Native Apple Silicon | 7.11 |
 | Bundled MCP servers; monitor snapshot endpoints | 7.26 |
@@ -466,6 +517,30 @@ whose default reads wrong.
 
 **Phase G — performance and resources (~35 min).** VRAM per instance; whether
 Style and Block Size changes reallocate; resolution churn; a 30-minute soak.
+
+**Phase L — licensing (~25 min).** Things only the host can show:
+
+1. **Nothing typed is saved.** License with a key, save the composition, and
+   search the saved `.avc` for `LT-` and for your email address. Neither may
+   appear. (The field returns an empty value to the host by design.)
+2. **The mixer shares the licence.** Set a layer's blend mode to **Mosh
+   Transplant**; its Licence field's name must match the effect's without typing
+   anything into it.
+3. **A long paste.** Type `folder`, copy the request code from `README.txt`, get
+   a token for it from the account page, and paste the token into the field. If
+   Resolume truncates or refuses a paste that long, say so — the fallback is
+   saving it as `activation-token.txt` in the folder, which must be picked up
+   within a few seconds and the file removed. Try both.
+4. **A running show is never locked.** With an instance live and licensed, type
+   `deactivate`. The name must read `Licence: locked, removed from this
+   computer` — the name describes the computer's licence, not the instance —
+   yet the running instance must **keep moshing**. Only a newly added instance
+   may lock. License again afterwards.
+5. **Offline launch.** Disconnect the network, restart Resolume, add the effect:
+   it must be live immediately with the cached licence, and nothing may wait on
+   the network (no stall adding the effect).
+6. **The check-in.** Online, type `check`; the name returns to `active`, and
+   `README.txt`'s "Next check-in due by" moves forward.
 
 **Phase R — the restart batch (~15 min).** Everything requiring a restart, run
 once rather than scattered through the day.

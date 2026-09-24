@@ -51,6 +51,7 @@
 			<li><a href="#sync">Sync</a></li>
 			<li><a href="#output">Output</a></li>
 			<li><a href="#mask">Mask</a></li>
+			<li><a href="#licence">Licence</a></li>
 			<li><a href="#mixer">Mixer only</a></li>
 			<li><a href="#interactions">How they interact</a></li>
 		</ul>
@@ -639,6 +640,41 @@
 				before that is undone, so a logo on a transparent background masks by its
 				alpha as well as its brightness &mdash; no keying step. A mask layer at a
 				different resolution is stretched to fit rather than letterboxed.
+			</div>
+
+			<h2 id="licence">Licence</h2>
+
+			<p>
+				The last parameter, on the effect and on Mosh Transplant alike, is a text
+				field. Type into it and press Enter; it empties, and its <em>name</em>
+				shows the answer. It never keeps what you typed, so a key or an email
+				address is never saved into a composition. Both plugins share one licence
+				per computer.
+			</p>
+
+			<div class="table-wrap">
+			<table>
+				<thead>
+					<tr><th>Type</th><th>What happens</th></tr>
+				</thead>
+				<tbody>
+					<tr><td>LT-DATA-&hellip;</td><td class="desc">Activates this computer with your licence key.</td></tr>
+					<tr><td>your email</td><td class="desc">Starts a free trial on this computer.</td></tr>
+					<tr><td>folder</td><td class="desc">Opens the licence folder. Its <code>README.txt</code> has the status and the <strong>request code</strong> for activating a computer that is offline.</td></tr>
+					<tr><td>check</td><td class="desc">Checks in with the licence service now. It also happens by itself when online.</td></tr>
+					<tr><td>deactivate</td><td class="desc">Releases this computer's seat, so the key can move to another.</td></tr>
+				</tbody>
+			</table>
+			</div>
+
+			<div class="note warn" style="margin-top:22px">
+				<span class="note-label">Locked looks like passthrough</span>
+				Without a licence or a running trial, a new Datamosh passes its video
+				through untouched. The field's name then reads
+				<strong>Licence: locked, &hellip;</strong>, which is how to tell it from an
+				effect with nothing to do. Licensing or starting a trial unlocks it at
+				once, even mid-show. The reverse never happens: an effect that is already
+				running is never locked, whatever happens to the licence or the network.
 			</div>
 
 			<h2 id="mixer">Mosh Transplant only</h2>

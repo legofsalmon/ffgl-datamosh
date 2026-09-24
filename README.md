@@ -75,7 +75,7 @@ Install straight into Resolume with
 ## Test
 
 ```sh
-ctest --test-dir build --output-on-failure   # 57 tests
+ctest --test-dir build --output-on-failure   # 84 tests
 ./build/tests/datamosh_tests --profile        # per-pass GPU timing
 ```
 
@@ -140,11 +140,76 @@ Then `--profile` on real hardware, and tune `SEARCH_LAMBDA`, `SEARCH_ZERO_BIAS`
 and `THRESHOLD_PIXEL_RANGE` (`src/core/MoshPipeline.cpp`) plus the cut-sensitivity
 curve (`src/core/shaders/Control.glsl`) against footage.
 
+## Licence key
+
+Release builds of both plugins need a licence key or a running trial from
+[letissier.ie](https://letissier.ie). **Without one, Datamosh is locked**: a new
+effect passes its input through untouched and does no datamoshing. The owner's
+choice here is "trial, then lock".
+
+Because an untouched passthrough is also exactly what a dead plugin looks like,
+a locked instance says so in two places a dead one cannot:
+
+- the last parameter, **Licence**, is renamed **`Licence: locked, unlicensed`**
+  (or `locked, trial ended`), and
+- the host log gets one line per instance: `datamosh: locked - no licence or
+  trial on this computer; ...`.
+
+Everything is typed into that **Licence** field, on the effect or on Mosh
+Transplant — they share one licence — and Enter:
+
+| Type | What happens |
+| --- | --- |
+| `LT-DATA-XXXX-XXXX-XXXX` | Activates this computer online. Case, spaces and look-alike letters (`O`/`0`, `I`/`L`/`1`) don't matter. |
+| an email address | Starts a free trial on this computer |
+| `folder` | Opens the licence folder, which holds a `README.txt` with the status, the **request code** for offline activation, and these instructions |
+| `check` | Checks in with the service now |
+| `deactivate` | Releases this computer's seat (and forgets the licence locally, even offline) |
+| a token (`eyJ...`) | Offline activation: the token from the account page for this computer's request code |
+
+The field empties on Enter and never shows what was typed, so a key, an email or
+a token is never saved into a composition. Its **name** shows the result:
+`Licence: active`, `Licence: trial, 12 days left`, `Licence: activating...`, or
+the service's own words when it refuses.
+
+The licence lives per user, outside any project:
+
+- macOS: `~/Library/Application Support/LeTissier/Datamosh/`
+- Windows: `%APPDATA%\LeTissier\Datamosh\`
+
+**Offline activation.** Type `folder`, copy the request code from `README.txt`,
+and on any connected machine sign in at
+[letissier.ie/account](https://letissier.ie/account), enter the code and get a
+token. Save it into the licence folder as `activation-token.txt` — it is picked
+up within seconds and the file removed — or paste it into the field if
+Resolume's text box takes one that long.
+
+Rules the implementation keeps, and the tests pin:
+
+- **Nothing licence-related stops a running show.** A licensed or trial instance
+  never locks while it exists, even if the licence lapses or is deactivated
+  underneath it; only instances added after that are affected. Licensing, by
+  contrast, unlocks running instances immediately.
+- **Nothing waits on the network.** All file and network work is on one
+  background thread; per frame the render thread reads two atomics, and takes a
+  brief lock to copy the field's name only when it has changed. Launch uses the
+  cached token and checks in later. Being offline, or the service asking for a
+  check-in or saying an update window has ended, never restricts anything.
+- **A build that cannot verify never restricts.** No usable public key, or an
+  unreadable machine id, means unrestricted.
+
+Tokens are Ed25519-signed by the service and verified locally with
+[Monocypher](external/monocypher/README.md); a token for another product (a
+Vizz licence, say) is refused. The policy is one line in
+[`src/licence/Licence.h`](src/licence/Licence.h) — `Open`, `Watermark` (a
+"DATAMOSH · UNLICENSED" band over working output) or `Lock` — and, the project
+being MIT, anyone building from source can set it to `Open`.
+
 ## Licence
 
 [MIT](LICENSE). Use it, change it, ship it in something commercial — keep the
 copyright notice with it and accept that it comes with no warranty.
 
-The plugins link the FFGL SDK and (on Windows) GLEW, both BSD-style and both
-compatible; their notices are generated into a `THIRD-PARTY.txt` inside every
+The plugins link the FFGL SDK, Monocypher and (on Windows) GLEW, all BSD-style
+and all compatible; their notices are generated into a `THIRD-PARTY.txt` inside every
 release archive alongside a copy of `LICENSE`.
