@@ -2,6 +2,7 @@
 
 #include <MoshParams.h>
 #include <MoshPipeline.h>
+#include <Runtime.h>
 
 #include <ffgl/FFGLLog.h>
 #include <ffglquickstart/FFGLEffect.h>
@@ -11,14 +12,23 @@
 #include <ffglquickstart/FFGLParamTrigger.h>
 #include <ffglquickstart/FFGLParamFFT.h>
 #include <ffglquickstart/FFGLParamBool.h>
+#include <ffglquickstart/FFGLParamText.h>
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
 
 namespace datamosh {
+
+// The render core draws the licence mark without knowing about licences; the
+// two enums are the same numbers so the gate can be handed straight across.
+static_assert( static_cast< int >( Watermark::None ) == static_cast< int >( licence::Mark::None ) &&
+                   static_cast< int >( Watermark::Unlicensed ) == static_cast< int >( licence::Mark::Unlicensed ) &&
+                   static_cast< int >( Watermark::TrialEnded ) == static_cast< int >( licence::Mark::TrialEnded ),
+               "Watermark and licence::Mark must agree" );
 
 /// Shared behaviour for both plugin binaries.
 ///
@@ -40,6 +50,9 @@ public:
 	FFResult DeInitGL() override;
 	FFResult SetTime( double time ) override;
 	FFResult SetFloatParameter( unsigned int index, float value ) override;
+	FFResult SetTextParameter( unsigned int index, const char* value ) override;
+	char*    GetTextParameter( unsigned int index ) override;
+	char*    GetParameterDisplay( unsigned int index ) override;
 
 protected:
 	/// Fills in the FrameInputs for this plugin type. The effect points both
@@ -91,9 +104,21 @@ protected:
 	/// whole audio path was returning zero.
 	float AudioLevel();
 
+	/// Brings the Licence field's display name up to date with the licence
+	/// worker's status. Takes a lock only when the status has changed.
+	void RefreshLicenceLabel( bool raiseEvent );
+
 	static constexpr unsigned int NO_PARAM = 0xFFFFFFFFu;
 
 	MoshPipeline pipeline;
+
+	/// The Licence text field. Never holds what was typed — see SetTextParameter.
+	unsigned int          licenceParamIndex = NO_PARAM;
+	/// This instance's licence gate, which only ever loosens. See GateLatch.
+	licence::GateLatch    licenceLatch;
+	std::uint32_t         licenceLabelSeen  = 0xFFFFFFFFu;
+	/// The host-log line for a locked instance goes out once, not per frame.
+	bool                  lockAnnounced     = false;
 
 	std::shared_ptr< ffglqs::ParamFFT > audioParam;
 
@@ -336,6 +361,23 @@ void DatamoshPlugin< HostBase >::DeclareCommonParams()
 	AddGrouped( "View", ParamOption::Create( "View",
 	                                           { { "Result", 0.0f }, { "Motion", 1.0f }, { "Gate", 2.0f } },
 	                                           0 ) );
+
+	// Last, like everything added after the first release, and in a group of
+	// its own for the reason Spread and View have theirs.
+	//
+	// One text field is the whole licensing interface, because a plugin has no
+	// window of its own and a text parameter is the only free-form input FFGL
+	// gives a host to render. It takes a licence key, an email address (a
+	// trial), a pasted offline token, or a word — "folder", "check",
+	// "deactivate" — and its display name reports the result. See
+	// SetTextParameter for why what is typed is never kept.
+	//
+	// A ParamText goes through AddParam's generic overload, which is one
+	// SetParamInfo — one record, the same as every other parameter here. The
+	// display name changes later go through SetParamDisplayName, which assigns
+	// in place and cannot append a phantom.
+	licenceParamIndex = static_cast< unsigned int >( this->params.size() );
+	AddGrouped( "Licence", ffglqs::ParamText::create( "Licence" ) );
 
 	// Exactly the parameters ApplyStyle writes. Nothing else can invalidate a
 	// style, so Trigger, Mix, Quality and the rest leave the dropdown alone.
@@ -618,6 +660,66 @@ FFResult DatamoshPlugin< HostBase >::SetFloatParameter( unsigned int index, floa
 }
 
 template< typename HostBase >
+FFResult DatamoshPlugin< HostBase >::SetTextParameter( unsigned int index, const char* value )
+{
+	if( index != licenceParamIndex || licenceParamIndex == NO_PARAM )
+		return HostBase::SetTextParameter( index, value );
+
+	// Handed straight to the licence worker and never stored in the parameter.
+	//
+	// A composition saves each parameter's value, and a composition is a file
+	// people send each other. What the host reads back — GetTextParameter — is
+	// therefore always empty, so a key typed here can never travel inside a
+	// saved show, and neither can an email address or a token.
+	//
+	// The host's instantiation walk writes the declared default, "", into every
+	// text parameter, and anything but FF_SUCCESS there destroys the instance
+	// with nothing logged. Empty is accepted and ignored.
+	if( value != nullptr && value[ 0 ] != '\0' )
+	{
+		licence::Submit( value );
+		// Ask the host to read the field back, which empties it.
+		this->RaiseParamEvent( index, FF_EVENT_FLAG_VALUE );
+	}
+	return FF_SUCCESS;
+}
+
+template< typename HostBase >
+char* DatamoshPlugin< HostBase >::GetTextParameter( unsigned int index )
+{
+	if( index != licenceParamIndex || licenceParamIndex == NO_PARAM )
+		return HostBase::GetTextParameter( index );
+	static char empty[ 1 ] = { '\0' };
+	return empty;
+}
+
+template< typename HostBase >
+char* DatamoshPlugin< HostBase >::GetParameterDisplay( unsigned int index )
+{
+	// The SDK answers a text parameter's display with FF_FAIL cast to a
+	// pointer — the address 1. A host that trusts it reads from there.
+	if( index == licenceParamIndex && licenceParamIndex != NO_PARAM )
+	{
+		static char empty[ 1 ] = { '\0' };
+		return empty;
+	}
+	return HostBase::GetParameterDisplay( index );
+}
+
+template< typename HostBase >
+void DatamoshPlugin< HostBase >::RefreshLicenceLabel( bool raiseEvent )
+{
+	if( licenceParamIndex == NO_PARAM )
+		return;
+	const std::uint32_t generation = licence::LabelGeneration();
+	if( generation == licenceLabelSeen )
+		return;
+	licenceLabelSeen = generation;
+	// In place, like SetParamGroup and SetParamVisibility — not SetParamInfo.
+	this->SetParamDisplayName( licenceParamIndex, licence::CurrentLabel(), raiseEvent );
+}
+
+template< typename HostBase >
 float DatamoshPlugin< HostBase >::ParamValue( const char* name ) const
 {
 	// GetParam is non-const in the SDK but does not mutate; this keeps the
@@ -709,6 +811,13 @@ FFResult DatamoshPlugin< HostBase >::InitGL( const FFGLViewportStruct* viewPort 
 		return FF_FAIL;
 	}
 
+	// Here, not in the constructor: FFGL constructs a prototype instance while
+	// the host is only scanning its plugin folders, and that one must not start
+	// a thread. This is a real instance about to render. Start() spawns the
+	// worker and returns; the licence folder is read on the worker.
+	licence::Start();
+	RefreshLicenceLabel( false );
+
 	return CFFGLPlugin::InitGL( viewPort );
 }
 
@@ -732,6 +841,12 @@ FFResult DatamoshPlugin< HostBase >::ProcessOpenGL( ProcessOpenGLStruct* pGL )
 	if( pGL == nullptr )
 		return FF_FAIL;
 
+	// One atomic load. The licence is decided on the worker thread; nothing
+	// here reads a file, waits on the network or takes a lock.
+	const licence::Gate gate = licenceLatch.Update( licence::CurrentGate() );
+	const Watermark     mark = static_cast< Watermark >( gate.mark );
+	RefreshLicenceLabel( true );
+
 	// Refreshes the FFT buffers and the wall-clock delta. Normally called by
 	// the quickstart base's ProcessOpenGL, which we are replacing.
 	this->UpdateAudioAndTime();
@@ -739,6 +854,25 @@ FFResult DatamoshPlugin< HostBase >::ProcessOpenGL( ProcessOpenGLStruct* pGL )
 	FrameInputs inputs;
 	if( !GatherInputs( pGL, inputs ) )
 		return FF_FAIL;
+
+	if( gate.restriction == licence::Restriction::Lock )
+	{
+		// The Lock policy: the input, untouched, and the pipeline does no work.
+		//
+		// Untouched is also what a plugin that failed to load looks like, so
+		// the lock announces itself where a dead plugin cannot: the Licence
+		// field's name reads "Licence: locked, ..." (RefreshLicenceLabel,
+		// above), and the host log gets one line per instance.
+		if( !lockAnnounced )
+		{
+			lockAnnounced = true;
+			FFGLLog::LogToHost( "datamosh: locked - no licence or trial on this computer; type a licence key "
+			                    "or an email address into the Licence field" );
+		}
+		this->consumeAllTrigger();
+		pipeline.Passthrough( pGL->HostFBO, inputs );
+		return FF_SUCCESS;
+	}
 
 	MoshParams params = ReadParams();
 
@@ -791,12 +925,15 @@ FFResult DatamoshPlugin< HostBase >::ProcessOpenGL( ProcessOpenGLStruct* pGL )
 	// HasHistory also covers the case where the very first call arrives with
 	// time already settled: the gate would skip the advance, leaving nothing in
 	// the accumulation buffer to composite.
+	// The mark rides on both paths. On the passthrough one too, or an
+	// unlicensed copy's first frame — and every frame of one whose pipeline
+	// cannot run — would go out unmarked.
 	if( advanced && pipeline.HasHistory() )
-		pipeline.Composite( pGL->HostFBO, params.mix, params.view );
+		pipeline.Composite( pGL->HostFBO, params.mix, params.view, mark );
 	else
 		// Never fail to a black frame: an effect that cannot run should cost the
 		// operator the effect, not the output.
-		pipeline.Passthrough( pGL->HostFBO, inputs );
+		pipeline.Passthrough( pGL->HostFBO, inputs, mark );
 
 	return FF_SUCCESS;
 }

@@ -132,9 +132,9 @@ function( datamosh_add_plugin TARGET )
         endif()
     endif()
 
-    # Both object libraries explicitly: CMake does not propagate objects
+    # Every object library explicitly: CMake does not propagate objects
     # transitively through an OBJECT library, only usage requirements.
-    target_link_libraries( ${TARGET} PRIVATE datamosh::core datamosh::ffgl_sdk )
+    target_link_libraries( ${TARGET} PRIVATE datamosh::core datamosh::licence datamosh::ffgl_sdk )
 
     install( TARGETS ${TARGET}
         LIBRARY DESTINATION "."
