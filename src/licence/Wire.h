@@ -22,6 +22,16 @@ struct HttpResponse
 	std::string error;
 };
 
+/// What a caller may ask of one request beyond its path and body.
+struct PostOptions
+{
+	/// The whole request, resolve to last byte. The licence calls keep the
+	/// transport's own (longer) default; crash and feedback reports ask for 8.
+	int         timeoutSeconds = 0;
+	/// Empty keeps the transport's default.
+	std::string userAgent;
+};
+
 /// POSTs JSON to the licence service. One implementation per platform —
 /// WinHTTP on Windows, NSURLSession on macOS — and a stub on Linux, where the
 /// plugin is only ever built for the tests.
@@ -29,10 +39,36 @@ class Transport
 {
 public:
 	virtual ~Transport() = default;
-	/// `path` is below SERVICE_URL, e.g. "/api/licence/activate". Blocking,
+	/// `path` is below ServiceUrl(), e.g. "/api/licence/activate". Blocking,
 	/// with its own timeout; called only from the worker thread.
 	virtual HttpResponse Post( const std::string& path, const std::string& jsonBody ) = 0;
+	/// The same, with a timeout and User-Agent of the caller's choosing. A
+	/// transport that has no use for them — a test's stand-in — need not
+	/// override this.
+	virtual HttpResponse Post( const std::string& path, const std::string& jsonBody, const PostOptions& options )
+	{
+		( void )options;
+		return Post( path, jsonBody );
+	}
 };
+
+/// SERVICE_URL, or the LETISSIER_API environment variable when it is set to
+/// an http(s) URL — the one override every letissier.ie client shares, for
+/// pointing a build at a test deployment. Tokens are still verified against
+/// the compiled-in key, so pointing it elsewhere cannot license anything.
+std::string ServiceUrl();
+
+/// A service base URL, split for transports that want the parts (WinHTTP).
+struct ServiceAddress
+{
+	bool        valid  = false;
+	bool        secure = true;
+	std::string host;
+	int         port   = 443;
+	/// Any path the base carries, without a trailing slash; usually empty.
+	std::string basePath;
+};
+ServiceAddress ParseServiceUrl( const std::string& url );
 
 /// The platform's transport, or a stub that never reaches anything.
 std::unique_ptr< Transport > MakePlatformTransport();
