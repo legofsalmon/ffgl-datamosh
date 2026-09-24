@@ -133,6 +133,8 @@ private:
 	std::string             localHash;
 	Verdict                 verdict;
 	bool                    hasToken        = false;
+	/// The service revoked this computer's licence; its words, from the folder.
+	std::optional< std::string > revoked;
 	bool                    decidedOnce     = false;
 	std::string             lastStamp;
 	std::int64_t            lastDecision    = 0;

@@ -33,6 +33,10 @@ public:
 	/// and removed by the worker — the fallback for a host whose text field will
 	/// not take a few hundred pasted characters.
 	static constexpr const char* DROP_FILE       = "activation-token.txt";
+	/// Present while the service has revoked this computer's licence (a full
+	/// refund ends it). Holds the service's own words, for the README. The key
+	/// stays beside it, so a later check-in can restore a reinstated licence.
+	static constexpr const char* REVOKED_FILE    = "revoked";
 
 	explicit Store( std::filesystem::path directory );
 
@@ -49,7 +53,15 @@ public:
 	bool WriteReadme( const std::string& text ) const { return Write( README_FILE, text ); }
 	bool RemoveDropFile() const;
 
-	/// Removes the token and the key. The folder, README and check-in record stay.
+	/// Removes the token only, keeping the key: what a revocation does.
+	void RemoveToken() const;
+
+	std::optional< std::string > ReadRevoked() const { return Read( REVOKED_FILE ); }
+	bool WriteRevoked( const std::string& message ) const { return Write( REVOKED_FILE, message ); }
+	void ClearRevoked() const;
+
+	/// Removes the token, the key and any revocation. The folder, README and
+	/// check-in record stay.
 	void Forget() const;
 
 	std::int64_t LastCheckIn() const;

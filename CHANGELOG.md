@@ -31,7 +31,13 @@ Notable changes to ffgl-datamosh. Format follows
   is what a dead plugin looks like too, a locked instance names itself — the
   Licence field reads `Licence: locked, ...` — and logs one `datamosh: locked`
   line. Licensing unlocks running instances at once; nothing ever locks an
-  instance that is already running. The policy is one line in
+  instance that is already running.
+- **A revoked licence ends on this computer.** A full refund revokes the
+  licence. When a check-in hears `revoked`, the stored token is deleted and the
+  key kept: new instances are locked (`Licence: locked, revoked`), running ones
+  carry on, and `README.txt` says what happened. The daily check-in continues
+  with the key, so a reinstated licence comes back by itself. No other refusal,
+  and no network failure, touches the cached token. The policy is one line in
   `src/licence/Licence.h` (`Open`, `Watermark` or `Lock`).
 
 ### Fixed

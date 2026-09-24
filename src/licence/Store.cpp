@@ -100,11 +100,24 @@ bool Store::RemoveDropFile() const
 	return fs::remove( directory / DROP_FILE, error );
 }
 
+void Store::RemoveToken() const
+{
+	std::error_code error;
+	fs::remove( directory / TOKEN_FILE, error );
+}
+
+void Store::ClearRevoked() const
+{
+	std::error_code error;
+	fs::remove( directory / REVOKED_FILE, error );
+}
+
 void Store::Forget() const
 {
 	std::error_code error;
 	fs::remove( directory / TOKEN_FILE, error );
 	fs::remove( directory / KEY_FILE, error );
+	fs::remove( directory / REVOKED_FILE, error );
 }
 
 std::int64_t Store::LastCheckIn() const
@@ -128,7 +141,7 @@ std::string Store::Stamp() const
 	// second as the last read. These files are a few hundred bytes, and this
 	// runs on the worker thread.
 	std::string stamp;
-	for( const char* name : { TOKEN_FILE, KEY_FILE, DROP_FILE } )
+	for( const char* name : { TOKEN_FILE, KEY_FILE, DROP_FILE, REVOKED_FILE } )
 	{
 		const auto contents = Read( name );
 		stamp += contents ? std::to_string( std::hash< std::string >{}( *contents ) ) : std::string( "-" );

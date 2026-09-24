@@ -1,6 +1,6 @@
 # Validating a build in Resolume
 
-Everything in this project is verified by 84 automated tests against synthetic
+Everything in this project is verified by 88 automated tests against synthetic
 footage with known ground truth. None of it is verified against the actual host.
 This document is how that gap gets closed.
 
@@ -236,7 +236,7 @@ Click the effect's name to open its parameters.
 returned FF_FAIL, and there are only two causes: **a shader failed to compile on
 this driver**, or the fullscreen quad could not be created. Render-target
 allocation happens later and cannot make this step fail. Shader compilation is
-the likely one: all 84 tests compile on Mesa llvmpipe, the most permissive GLSL
+the likely one: all 88 tests compile on Mesa llvmpipe, the most permissive GLSL
 front end in existence, while Apple's GL 4.1 compiler is the strictest. At risk:
 GLSL array constructors in `BlockMatch`, `isnan`/`isinf`, `textureLod` with a
 computed level, `round()`. → **triage F1**.

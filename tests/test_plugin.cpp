@@ -1642,6 +1642,65 @@ TEST( ATrialThatHasEndedLocksNewInstancesOnly )
 	host.Teardown();
 }
 
+TEST( ARevokedLicenceLocksNewInstancesOnly )
+{
+	// A refund revokes the licence. The show that is running carries on; the
+	// next effect added is locked and says why.
+	TempFolder  folder;
+	Clock       clock;
+	bool        revoked = false;
+	TestLicence rig( folder.Path(), licence::Policy::Lock, clock, [ & ]( const FakeServer::Request& ) {
+		return revoked ? Respond( 403, "{\"ok\":false,\"reason\":\"revoked\",\"message\":\"Refunded.\"}" )
+		               : Unreachable();
+	} );
+	licence::Store store( folder.Path() );
+	store.WriteToken( LicenceFor( rig, clock ) );
+	store.WriteKey( "LT-DATA-K7M2-9PQR-4XTC" );
+	rig.service->Pump();
+	CHECK( rig.service->CurrentStatus() == licence::Status::Active );
+	ScopedLicence scoped( *rig.service );
+
+	Host host;
+	CHECK( host.Setup( FRAME_WIDTH, FRAME_HEIGHT, 1 ) );
+
+	TestableEffect running;
+	const FFGLViewportStruct viewport = host.Viewport();
+	CHECK( running.InitGL( &viewport ) == FF_SUCCESS );
+	running.SetFloatParameter( running.ParamIndex( "Mosh Amount" ), 1.0f );
+	running.SetFloatParameter( running.ParamIndex( "Motion Threshold" ), 0.0f );
+	auto frameOf = [ & ]( TestableEffect& plugin, int frame ) {
+		host.Fill( 0, frame * 3.0f, 0.0f );
+		plugin.SetTime( frame / 60.0 );
+		ProcessOpenGLStruct pGL = host.Frame();
+		plugin.ProcessOpenGL( &pGL );
+	};
+	for( int frame = 1; frame <= 8; ++frame )
+		frameOf( running, frame );
+
+	// The check-in hears "revoked" mid-show.
+	revoked = true;
+	clock.now += 86400 + 120;
+	rig.service->Pump();
+	CHECK( !store.ReadToken().has_value() );
+	CHECK( store.ReadKey().has_value() );
+	CHECK( rig.service->CurrentGate().restriction == licence::Restriction::Lock );
+
+	for( int frame = 9; frame <= 16; ++frame )
+		frameOf( running, frame );
+	CHECK( running.licenceLatch.Held().restriction == licence::Restriction::None );
+	LicensedRun still;
+	still.output = ReadTarget( host.Output() );
+	still.input  = MakeShiftedPattern( FRAME_WIDTH, FRAME_HEIGHT, 16 * 3.0f, 0.0f );
+	CHECK( MeanDifferenceFromInput( still ) > 0.02f );
+	running.DeInitGL();
+
+	const LicensedRun fresh = RunEffect( host, 1.0f );
+	CHECK( fresh.held.restriction == licence::Restriction::Lock );
+	CHECK( MaxDifferenceFromInput( fresh ) <= 1.5f / 255.0f );
+	CHECK( fresh.label == "Licence: locked, revoked" );
+	host.Teardown();
+}
+
 TEST( LicensingUnlocksAnInstanceAlreadyInTheComposition )
 {
 	TempFolder  folder;

@@ -11,7 +11,7 @@ Two FFGL plugins that simulate datamoshing in Resolume, over a shared render cor
 
 ## This is a pre-release — read this first
 
-Everything here is verified by an automated test suite: 85 tests running a real
+Everything here is verified by an automated test suite: 88 tests running a real
 headless OpenGL 4.1 context against synthetic footage with known ground truth,
 green on Linux, Windows and macOS.
 

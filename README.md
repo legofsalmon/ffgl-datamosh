@@ -75,7 +75,7 @@ Install straight into Resolume with
 ## Test
 
 ```sh
-ctest --test-dir build --output-on-failure   # 84 tests
+ctest --test-dir build --output-on-failure   # 88 tests
 ./build/tests/datamosh_tests --profile        # per-pass GPU timing
 ```
 
@@ -187,14 +187,20 @@ Resolume's text box takes one that long.
 Rules the implementation keeps, and the tests pin:
 
 - **Nothing licence-related stops a running show.** A licensed or trial instance
-  never locks while it exists, even if the licence lapses or is deactivated
-  underneath it; only instances added after that are affected. Licensing, by
+  never locks while it exists, even if the licence lapses, is deactivated or is
+  revoked underneath it; only instances added after that are affected. Licensing, by
   contrast, unlocks running instances immediately.
 - **Nothing waits on the network.** All file and network work is on one
   background thread; per frame the render thread reads two atomics, and takes a
   brief lock to copy the field's name only when it has changed. Launch uses the
   cached token and checks in later. Being offline, or the service asking for a
   check-in or saying an update window has ended, never restricts anything.
+- **A revoked licence ends; nothing else does.** A full refund revokes the
+  licence, and when a check-in hears `revoked` the stored token is deleted, so
+  new instances are locked (`Licence: locked, revoked`) and `README.txt` says
+  so. The key is kept and the daily check-in continues, so a licence that is
+  reinstated comes back by itself. Any other refusal, and any network failure,
+  leaves the cached token deciding.
 - **A build that cannot verify never restricts.** No usable public key, or an
   unreadable machine id, means unrestricted.
 

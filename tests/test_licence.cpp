@@ -584,6 +584,107 @@ TEST( CheckingInPersistsTheNewTokenAndOfflineChangesNothing )
 	CHECK( service.Label() == "Licence: active; check-in due" );
 }
 
+TEST( ARevokedLicenceDropsItsTokenAndKeepsItsKey )
+{
+	// A full refund revokes the licence, and the refund policy says that ends
+	// it. So the heartbeat's "revoked" is honoured: the token goes, the key
+	// stays so a reinstatement can come back through a later check-in.
+	TempFolder  folder;
+	Clock       clock;
+	bool        revoked = false;
+	auto        honest  = HonestServer( clock );
+	TestLicence rig( folder.Path(), Policy::Lock, clock, [ & ]( const FakeServer::Request& request ) {
+		if( revoked && request.path == licence::PATH_HEARTBEAT )
+			return Respond( 403, "{\"ok\":false,\"reason\":\"revoked\","
+			                     "\"message\":\"This licence was refunded and has ended.\"}" );
+		return honest( request );
+	} );
+	licence::Service& service = *rig.service;
+	licence::Store    store( folder.Path() );
+
+	service.Pump();
+	service.Submit( "LT-DATA-K7M2-9PQR-4XTC" );
+	service.Pump();
+	CHECK( service.CurrentStatus() == Status::Active );
+	licence::GateLatch running;
+	CHECK( running.Update( service.CurrentGate() ).restriction == Restriction::None );
+
+	// Refunded. The next daily check-in hears about it.
+	revoked = true;
+	clock.now += 86400 + 120;
+	service.Pump();
+	CHECK( rig.server->requests.size() == 2 );
+	CHECK( !store.ReadToken().has_value() );
+	CHECK( store.ReadKey() == std::optional< std::string >( "LT-DATA-K7M2-9PQR-4XTC" ) );
+	CHECK( service.CurrentStatus() == Status::Invalid );
+	CHECK( service.CurrentGate().restriction == Restriction::Lock );
+	CHECK( service.Label() == "Licence: locked, revoked" );
+	const std::string readme = ReadFile( ( folder.Path() / "README.txt" ).string() );
+	CHECK( readme.find( "This licence was revoked by the licence service: This licence was refunded and has "
+	                    "ended." ) != std::string::npos );
+
+	// An instance already running keeps its gate; a new one is locked.
+	CHECK( running.Update( service.CurrentGate() ).restriction == Restriction::None );
+	licence::GateLatch fresh;
+	CHECK( fresh.Update( service.CurrentGate() ).restriction == Restriction::Lock );
+
+	// Reinstated: the key is still here, so the next check-in brings it back.
+	revoked = false;
+	clock.now += 86400 + 120;
+	service.Pump();
+	CHECK( rig.server->requests.size() == 3 );
+	if( rig.server->requests.size() == 3 )
+		CHECK( rig.server->requests[ 2 ].path == licence::PATH_HEARTBEAT );
+	CHECK( store.ReadToken().has_value() );
+	CHECK( !store.ReadRevoked().has_value() );
+	CHECK( service.CurrentStatus() == Status::Active );
+	CHECK( service.Label() == "Licence: active" );
+	CHECK( ReadFile( ( folder.Path() / "README.txt" ).string() ).find( "revoked" ) == std::string::npos );
+}
+
+TEST( OnlyARevocationDropsTheToken )
+{
+	// Every other refusal, and every failure to reach the service, leaves the
+	// cached token deciding. A check-in mid-show must change nothing.
+	TempFolder  folder;
+	Clock       clock;
+	int         answer = -1;
+	auto        honest = HonestServer( clock );
+	const std::vector< licence::HttpResponse > refusals = {
+		Respond( 403, "{\"ok\":false,\"reason\":\"not_activated\",\"message\":\"Not activated here.\"}" ),
+		Respond( 403, "{\"ok\":false,\"reason\":\"expired\",\"message\":\"Expired.\"}" ),
+		Respond( 403, "{\"ok\":false,\"message\":\"No reason given.\"}" ),
+		Respond( 500, "{\"ok\":false,\"reason\":\"server_error\",\"message\":\"Oops.\"}" ),
+		Respond( 502, "<html>Bad gateway</html>" ),
+		Unreachable(),
+	};
+	TestLicence rig( folder.Path(), Policy::Lock, clock, [ & ]( const FakeServer::Request& request ) {
+		if( answer >= 0 && request.path == licence::PATH_HEARTBEAT )
+			return refusals[ static_cast< size_t >( answer ) ];
+		return honest( request );
+	} );
+	licence::Service& service = *rig.service;
+	licence::Store    store( folder.Path() );
+
+	service.Pump();
+	service.Submit( "LT-DATA-K7M2-9PQR-4XTC" );
+	service.Pump();
+	const auto token = store.ReadToken();
+	CHECK( token.has_value() );
+
+	for( answer = 0; answer < static_cast< int >( refusals.size() ); ++answer )
+	{
+		// An unreachable check-in retries hourly; the rest wait a day.
+		clock.now += 86400 + 120;
+		const size_t before = rig.server->requests.size();
+		service.Pump();
+		CHECK( rig.server->requests.size() == before + 1 );
+		CHECK( store.ReadToken() == token );
+		CHECK( !store.ReadRevoked().has_value() );
+		CHECK( service.CurrentGate().restriction == Restriction::None );
+	}
+}
+
 TEST( AnOfflineTokenIsTakenFromTheFieldOrTheFolder )
 {
 	Clock     clock;

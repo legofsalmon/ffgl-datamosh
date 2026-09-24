@@ -319,6 +319,9 @@ bool Service::Accept( const std::string& token, bool online, const std::string& 
 	const std::string keyToKeep = key.empty() ? checked.claims.key : key;
 	if( !keyToKeep.empty() )
 		store->WriteKey( keyToKeep );
+	// A new token from the service outranks any earlier revocation: the
+	// licence was reinstated, or this is a different one.
+	store->ClearRevoked();
 	return true;
 }
 
@@ -370,12 +373,24 @@ void Service::CheckIn( bool askedFor )
 
 	if( !reply.ok )
 	{
-		// Revoked, not activated, expired: the service's word goes in the
-		// README, and the cached token keeps deciding. A check-in that fails
-		// mid-show must change nothing on screen.
 		serviceMessage = reply.message;
 		if( askedFor )
 			notice = reply.message;
+
+		// Revoked is the one refusal that ends the licence here: a full refund
+		// revokes it, and the refund policy says that ends it. The token goes,
+		// so new instances decide as unlicensed; the key stays, so the daily
+		// check-in carries on and restores a licence that is reinstated.
+		// Running instances keep their latch, so nothing on screen changes.
+		//
+		// Every other refusal (not activated, expired, a server error) and
+		// every network failure keeps the cached token deciding.
+		if( reply.reason == "revoked" )
+		{
+			store->RemoveToken();
+			store->WriteRevoked( reply.message.empty() ? std::string( "revoked" ) : reply.message );
+			Decide( true );
+		}
 		return;
 	}
 
@@ -401,7 +416,10 @@ void Service::MaybeCheckIn()
 	if( now < nextCheckIn )
 		return;
 
-	if( !hasToken || verdict.status == Status::Expired || !store->ReadKey() )
+	// A revoked licence has no token but keeps checking in with its key, so a
+	// reinstatement reaches this computer by itself.
+	const bool awaitingReinstatement = !hasToken && revoked.has_value();
+	if( ( !hasToken && !awaitingReinstatement ) || verdict.status == Status::Expired || !store->ReadKey() )
 	{
 		// Nothing to check in with, or a trial that is over and will stay over.
 		nextCheckIn = now + settings.retryInterval;
@@ -460,6 +478,7 @@ void Service::Decide( bool force )
 
 	const auto token = store->ReadToken();
 	hasToken         = token.has_value();
+	revoked          = store->ReadRevoked();
 	verdict          = token ? licence::Decide( *token, environment.fingerprint, settings.buildDate, now,
 	                                            settings.publicKey, settings.product )
 	                         : Verdict{};
@@ -494,6 +513,8 @@ void Service::Publish()
 			text = "cannot read this computer's id";
 		else if( !decidedOnce )
 			text = "checking...";
+		else if( !hasToken && revoked )
+			text = "revoked";
 		else
 			text = DescribeStatus( verdict.status, hasToken, verdict.hasClaims ? &verdict.claims : nullptr,
 			                       Now(), keyConfigured );
@@ -556,6 +577,11 @@ std::string Service::ComposeReadme() const
 			    << " (it happens by itself when this computer is online)\n";
 		}
 	}
+	if( !hasToken && revoked )
+		out << "\nThis licence was revoked by the licence service: " << *revoked << "\n"
+		    << "The licence key is kept on this computer. If the licence is reinstated, the\n"
+		    << "next check-in restores it by itself; type \"check\" into the Licence field\n"
+		    << "to check straight away.\n\n";
 	out << "This build: " << DATAMOSH_VERSION << ", built " << Date( settings.buildDate ) << "\n";
 	if( !serviceMessage.empty() )
 		out << "\nLast word from the licence service: " << serviceMessage << "\n";
