@@ -410,9 +410,11 @@ jobs:
           tag_name: ${{ env.VERSION }}
           target_commitish: ${{ github.sha }}
           files: release/*
-          # Marked as a pre-release until the plugin has been run inside
-          # Resolume. Everything is verified against synthetic footage in a
-          # headless context; none of it is verified against the actual host.
-          prerelease: true
+          # A full release from 1.0.0: the plugin is sold, and it has passed
+          # the smoke test inside Resolume (VALIDATING.md). 0.x shipped as
+          # pre-releases while nothing had run in the host. A release that
+          # should not be offered as current can still be marked pre-release
+          # by hand after publishing.
+          prerelease: false
           generate_release_notes: false
           body_path: packaging/RELEASE-NOTES.md
