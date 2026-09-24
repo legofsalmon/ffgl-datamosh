@@ -11,7 +11,7 @@ Two FFGL plugins that simulate datamoshing in Resolume, over a shared render cor
 
 ## This is a pre-release — read this first
 
-Everything here is verified by an automated test suite: 57 tests running a real
+Everything here is verified by an automated test suite: 88 tests running a real
 headless OpenGL 4.1 context against synthetic footage with known ground truth,
 green on Linux, Windows and macOS.
 
@@ -99,6 +99,17 @@ whether **Smart App Control** is on, which rejects unsigned DLLs silently.
 
 Requires Resolume 7.3+. macOS builds are universal (arm64 + x86_64), so Apple
 Silicon is native.
+
+## Licence
+
+Datamosh needs a licence key or a free trial from
+[letissier.ie](https://letissier.ie). Without one, a new Datamosh passes video
+through untouched and its last parameter reads **Licence: locked, ...**. Type
+your key (`LT-DATA-...`), or your email address for a trial, into that
+**Licence** field and press Enter; it unlocks within seconds, including effects
+already in the composition. An effect that is already running is never locked,
+and nothing waits on the network. Type `folder` for the licence folder and the
+request code for offline activation.
 
 ## Why this simulates rather than corrupts
 

@@ -35,6 +35,13 @@ forget:
 Every check below is therefore built to tell *working* from *inert*, never
 *working* from *black*.
 
+There is now a second, deliberate way to get that picture: **a release build
+with no licence or trial on the machine is locked**, and a locked instance passes
+its input through untouched. The difference is that a locked instance says so —
+its `Licence` parameter's display name reads `Licence: locked, ...` and the log
+gets a `datamosh: locked - ...` line — so Step 3b settles it before any pixel
+comparison is scored.
+
 ---
 
 ## Before you touch anything
@@ -148,6 +155,28 @@ Also check `Motion Gain` (range 0..4), `Burst Length` (0.05..8) and `Motion Lag`
 you set afterwards will be compressed to the bottom of its range — nothing will
 look broken, it just never gets as extreme as the labels promise. Confirm it
 behaviourally in Step 5 before trusting any sweep.
+
+## Step 3b — The licence
+
+The last parameter is `Licence`, a **text** parameter in its own `Licence`
+group. It is expected; it is not a phantom. Read its display name if the API
+reports one (display names need 7.4.0), and grep the log for `datamosh: locked`:
+
+- `Licence: active` or `Licence: trial, N days left` — go on.
+- `Licence: locked, ...` — this instance will pass through untouched, and 5b
+  **will** fail. Licensing needs the user: **ask them** for their licence key,
+  or whether to start a trial with their email address. Do not invent an
+  address, and do not start a trial on their behalf without a yes — it is
+  one per machine. With their answer, either they type it into the field, or you
+  `PUT` it as that parameter's value — which should reach the plugin through
+  `SetTextParameter`, the same path as typing, though nobody has yet confirmed
+  that the API writes text parameters; if the name does not change, ask the user
+  to type it instead. Within a few seconds the name
+  should change and the instance should unlock without being re-added.
+
+The field always reads back empty — by design, so a key never lands in a saved
+composition. Never score it by its value. If the user cannot license the
+machine, stop and say so: nothing past 5a can be scored on a locked build.
 
 ## Step 4 — Capture setup
 
@@ -352,6 +381,9 @@ more than an admitted gap.
 - **Whether parameters render as collapsible groups**, and whether the effect and
   mixer thumbnails draw. UI, not API.
 - **Sustained performance and VRAM over a 30-minute soak.**
+- **Whether the Licence field behaves in Resolume's UI**: that it accepts a pasted
+  token of several hundred characters, and that the saved `.avc` holds no key.
+  VALIDATING.md Phase L is the procedure.
 - **Anything on a host below 7.26**, where you have no snapshots. Score those
   UNAVAILABLE, not FAILED.
 

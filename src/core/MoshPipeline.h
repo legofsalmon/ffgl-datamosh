@@ -4,6 +4,7 @@
 #include "GpuProfiler.h"
 #include "MoshParams.h"
 #include "RenderTarget.h"
+#include "Watermark.h"
 
 #include <ffglex/FFGLScreenQuad.h>
 #include <ffglex/FFGLShader.h>
@@ -60,12 +61,16 @@ public:
 	bool Advance( const FrameInputs& inputs, const MoshParams& params );
 
 	/// Draws the current result into the framebuffer and viewport the host has
-	/// bound. Does not modify the viewport.
-	void Composite( GLuint hostFBO, float mix, DebugView view = DebugView::Result );
+	/// bound. Does not modify the viewport. `mark` is the licence band, drawn
+	/// last over whatever the view produced.
+	void Composite( GLuint hostFBO, float mix, DebugView view = DebugView::Result,
+	                Watermark mark = Watermark::None );
 
 	/// Draws the untouched input straight through. Used when the pipeline could
-	/// not run, so a failure degrades to passthrough rather than to black.
-	void Passthrough( GLuint hostFBO, const FrameInputs& inputs );
+	/// not run, so a failure degrades to passthrough rather than to black, and
+	/// as the whole output of an instance the licence policy has locked — which
+	/// is why it can carry the mark too.
+	void Passthrough( GLuint hostFBO, const FrameInputs& inputs, Watermark mark = Watermark::None );
 
 	/// Forces the next Advance to treat itself as a keyframe.
 	void Invalidate() { hasHistory = false; }
@@ -100,6 +105,8 @@ public:
 
 private:
 	bool CompileShaders();
+	void SetMarkUniforms( ffglex::FFGLShader& shader, Watermark mark, float width, float height,
+	                      float uvScaleU, float uvScaleV );
 	/// Frees the render targets but keeps the shaders and quad, so the
 	/// passthrough path survives an allocation failure.
 	void ReleaseTargets();
@@ -135,6 +142,8 @@ private:
 	ffglex::FFGLShader compositeShader;
 	ffglex::FFGLShader passthroughShader;
 	ffglex::FFGLScreenQuad quad;
+	/// The licence mark's glyphs. Built once in Initialise.
+	GLuint                 markFont = 0;
 
 	RenderTarget colourTarget;  ///< ingested pixel source, straight alpha
 	PingPong     luma;          ///< front = previous frame, back = current

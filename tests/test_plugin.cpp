@@ -5,6 +5,7 @@
 // here, in the frame gate, the trigger handling, the parameter plumbing and the
 // mixer's input selection. These cover that surface.
 
+#include "harness/Licence.h"
 #include "harness/Synthetic.h"
 #include "harness/TestRunner.h"
 
@@ -12,8 +13,12 @@
 #include <DatamoshMixer.h>
 #include <MoshParams.h>
 #include <RenderTarget.h>
+#include <Store.h>
+#include <sdk/licence.hpp>
 
+#include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <limits>
 #include <cstring>
@@ -40,6 +45,8 @@ struct Testable : PluginType
 	using PluginType::ReadParams;
 	using PluginType::UpdateAudioAndTime;
 	using PluginType::ParamValue;
+	using PluginType::licenceParamIndex;
+	using PluginType::licenceLatch;
 
 	/// How many parameters the plugin actually holds, as against how many it
 	/// advertises to the host. The two diverging is what makes a plugin
@@ -831,10 +838,21 @@ bool SurvivesHostDefaultInitialisation( PluginType& plugin, unsigned int& failed
 	for( unsigned int index = 0; index < plugin.GetNumParams(); ++index )
 	{
 		const unsigned int type = plugin.GetParamType( index );
-		if( type == FF_TYPE_TEXT || type == FF_TYPE_FILE )
-			continue;
-
 		const FFMixed declared = plugin.GetParamDefault( index );
+
+		// instantiateGL writes text and file defaults through SetTextParameter,
+		// with the declared default string. The Licence field is the first
+		// text parameter here, so this branch is no longer hypothetical.
+		if( type == FF_TYPE_TEXT || type == FF_TYPE_FILE )
+		{
+			if( plugin.SetTextParameter( index, static_cast< const char* >( declared.PointerValue ) ) == FF_FAIL )
+			{
+				failedAt = index;
+				return false;
+			}
+			continue;
+		}
+
 		float value = 0.0f;
 		std::memcpy( &value, &declared.UIntValue, sizeof( float ) );
 
@@ -1379,6 +1397,391 @@ TEST( MixerHandlesInputsOfDifferentSizes )
 	CHECK( AllFinite( ReadTarget( plugin.pipeline.GetAccumulation() ) ) );
 
 	plugin.DeInitGL();
+	host.Teardown();
+}
+
+
+// ---------------------------------------------------------------------------
+// Licensing, as the render thread sees it
+// ---------------------------------------------------------------------------
+
+namespace {
+
+/// Runs `frames` frames of a moving pattern through a fresh effect and returns
+/// the last output, along with the input that produced it.
+struct LicensedRun
+{
+	std::vector< float >   output;
+	std::vector< uint8_t > input;
+	licence::Gate          held;
+	std::string            label;
+};
+
+LicensedRun RunEffect( Host& host, float moshAmount, int frames = 16 )
+{
+	LicensedRun   run;
+	TestableEffect plugin;
+	const FFGLViewportStruct viewport = host.Viewport();
+	if( plugin.InitGL( &viewport ) != FF_SUCCESS )
+		return run;
+
+	plugin.SetFloatParameter( plugin.ParamIndex( "Mosh Amount" ), moshAmount );
+	plugin.SetFloatParameter( plugin.ParamIndex( "Motion Threshold" ), 0.0f );
+
+	float shift = 0.0f;
+	for( int frame = 1; frame <= frames; ++frame, shift += 3.0f )
+	{
+		host.Fill( 0, shift, 0.0f );
+		plugin.SetTime( frame / 60.0 );
+		ProcessOpenGLStruct pGL = host.Frame();
+		plugin.ProcessOpenGL( &pGL );
+		run.input = MakeShiftedPattern( FRAME_WIDTH, FRAME_HEIGHT, shift, 0.0f );
+	}
+	run.output = ReadTarget( host.Output() );
+	run.held   = plugin.licenceLatch.Held();
+	run.label  = plugin.GetParamDisplayName( plugin.licenceParamIndex );
+	plugin.DeInitGL();
+	return run;
+}
+
+/// Largest per-channel difference between an output and the RGBA8 input, over
+/// rows [rowFrom, rowTo).
+float MaxDifferenceFromInput( const LicensedRun& run, int rowFrom = 0, int rowTo = FRAME_HEIGHT )
+{
+	if( run.output.size() != run.input.size() || run.output.empty() )
+		return 1e9f;
+	float worst = 0.0f;
+	for( int y = rowFrom; y < rowTo; ++y )
+	{
+		for( int x = 0; x < FRAME_WIDTH; ++x )
+		{
+			const size_t i = ( static_cast< size_t >( y ) * FRAME_WIDTH + x ) * 4;
+			for( int c = 0; c < 3; ++c )
+				worst = std::max( worst, std::fabs( run.output[ i + c ] - run.input[ i + c ] / 255.0f ) );
+		}
+	}
+	return worst;
+}
+
+float MeanDifferenceFromInput( const LicensedRun& run, int rowFrom = 0, int rowTo = FRAME_HEIGHT )
+{
+	if( run.output.size() != run.input.size() || run.output.empty() )
+		return -1.0f;
+	double total = 0.0;
+	int    count = 0;
+	for( int y = rowFrom; y < rowTo; ++y )
+	{
+		for( int x = 0; x < FRAME_WIDTH; ++x )
+		{
+			const size_t i = ( static_cast< size_t >( y ) * FRAME_WIDTH + x ) * 4;
+			for( int c = 0; c < 3; ++c )
+				total += std::fabs( run.output[ i + c ] - run.input[ i + c ] / 255.0f );
+			count += 3;
+		}
+	}
+	return count == 0 ? -1.0f : static_cast< float >( total / count );
+}
+
+/// One output pixel per glyph texel at this frame size: the text is 125 x 7,
+/// centred, so its band — two texels above and below — spans rows 42..53.
+constexpr int BAND_FROM = 42;
+constexpr int BAND_TO   = 54;
+
+/// A token this test rig's machine will accept, for `days` more days.
+std::string LicenceFor( const TestLicence& rig, const Clock& clock, const char* edition = "standard", int days = 30 )
+{
+	TokenSpec spec;
+	spec.machine    = rig.machineHash;
+	spec.edition    = edition;
+	spec.exp        = clock.now + days * 86400;
+	spec.maintUntil = clock.now + 365 * 86400;
+	spec.iat        = clock.now;
+	return MintToken( spec );
+}
+
+}  // namespace
+
+TEST( TheLicenceFieldIsTextAtTheEndAndNeverEchoesWhatWasTyped )
+{
+	// A composition saves every parameter's value, and a composition is a file
+	// people send each other. So whatever is typed — a key, an email, a token —
+	// must never be what the host reads back.
+	TempFolder  folder;
+	Clock       clock;
+	TestLicence rig( folder.Path(), licence::Policy::Lock, clock );
+	ScopedLicence scoped( *rig.service );
+
+	auto check = []( auto& plugin ) {
+		const unsigned int last = plugin.GetNumParams() - 1;
+		CHECK( plugin.licenceParamIndex == last );
+		CHECK( plugin.GetParamType( last ) == FF_TYPE_TEXT );
+		CHECK( plugin.GetParamName( last ) == std::string( "Licence" ) );
+		CHECK( plugin.GetParamGroup( last ) == "Licence" );
+
+		CHECK( plugin.SetTextParameter( last, "LT-DATA-K7M2-9PQR-4XTC" ) == FF_SUCCESS );
+		const char* readBack = plugin.GetTextParameter( last );
+		CHECK( readBack != nullptr && std::string( readBack ).empty() );
+		const char* shown = plugin.GetParameterDisplay( last );
+		CHECK( shown != nullptr && reinterpret_cast< std::uintptr_t >( shown ) != FF_FAIL );
+		// Empty is what instantiation writes, and it must be accepted.
+		CHECK( plugin.SetTextParameter( last, "" ) == FF_SUCCESS );
+		CHECK( plugin.SetTextParameter( last, nullptr ) == FF_SUCCESS );
+	};
+
+	TestableEffect effect;
+	check( effect );
+	TestableMixer mixer;
+	check( mixer );
+
+	// What was typed reached the worker, through both plugin types.
+	rig.service->Pump();
+	CHECK( rig.server->requests.size() == 1 );
+}
+
+TEST( ALockedInstancePassesThroughAndSaysSo )
+{
+	// "Trial, then lock": no licence, no trial, and the output is the input,
+	// untouched — even at Mosh Amount 1 on moving footage.
+	//
+	// Which is exactly what a dead plugin looks like, so the second half of
+	// this test is the part that matters: the lock is visible where a dead
+	// plugin's failure is not, in the Licence field's name and in the gate
+	// the instance is holding.
+	TempFolder  folder;
+	Clock       clock;
+	TestLicence rig( folder.Path(), licence::Policy::Lock, clock );
+	rig.service->Pump();
+	ScopedLicence scoped( *rig.service );
+
+	Host host;
+	CHECK( host.Setup( FRAME_WIDTH, FRAME_HEIGHT, 1 ) );
+	const LicensedRun locked = RunEffect( host, 1.0f );
+	CHECK( MaxDifferenceFromInput( locked ) <= 1.5f / 255.0f );
+	CHECK( locked.held.restriction == licence::Restriction::Lock );
+	CHECK( locked.label == "Licence: locked, unlicensed" );
+	host.Teardown();
+}
+
+TEST( ALicensedInstanceDoesNotPassThrough )
+{
+	// The counterpart, and the one that proves the lock is a decision rather
+	// than a plugin that has stopped working: the same footage, the same
+	// settings, a licence on disk — and the output is moshed.
+	TempFolder  folder;
+	Clock       clock;
+	TestLicence rig( folder.Path(), licence::Policy::Lock, clock );
+	licence::Store( folder.Path() ).WriteToken( LicenceFor( rig, clock ) );
+	rig.service->Pump();
+	CHECK( rig.service->CurrentStatus() == licence::Status::Active );
+	ScopedLicence scoped( *rig.service );
+
+	Host host;
+	CHECK( host.Setup( FRAME_WIDTH, FRAME_HEIGHT, 1 ) );
+	const LicensedRun licensed = RunEffect( host, 1.0f );
+	CHECK( licensed.held.restriction == licence::Restriction::None );
+	CHECK( MeanDifferenceFromInput( licensed ) > 0.02f );
+	CHECK( licensed.label == "Licence: active" );
+
+	// And a running trial is a licence for this purpose.
+	TempFolder  trialFolder;
+	TestLicence trial( trialFolder.Path(), licence::Policy::Lock, clock );
+	licence::Store( trialFolder.Path() ).WriteToken( LicenceFor( trial, clock, "trial", 14 ) );
+	trial.service->Pump();
+	ScopedLicence trialScope( *trial.service );
+	const LicensedRun trialling = RunEffect( host, 1.0f );
+	CHECK( MeanDifferenceFromInput( trialling ) > 0.02f );
+	CHECK( trialling.label == "Licence: trial, 14 days left" );
+	host.Teardown();
+}
+
+TEST( ATrialThatHasEndedLocksNewInstancesOnly )
+{
+	TempFolder  folder;
+	Clock       clock;
+	TestLicence rig( folder.Path(), licence::Policy::Lock, clock );
+	licence::Store( folder.Path() ).WriteToken( LicenceFor( rig, clock, "trial", 1 ) );
+	rig.service->Pump();
+	ScopedLicence scoped( *rig.service );
+
+	Host host;
+	CHECK( host.Setup( FRAME_WIDTH, FRAME_HEIGHT, 1 ) );
+
+	// An instance started during the trial...
+	TestableEffect running;
+	const FFGLViewportStruct viewport = host.Viewport();
+	CHECK( running.InitGL( &viewport ) == FF_SUCCESS );
+	running.SetFloatParameter( running.ParamIndex( "Mosh Amount" ), 1.0f );
+	running.SetFloatParameter( running.ParamIndex( "Motion Threshold" ), 0.0f );
+	auto frameOf = [ & ]( TestableEffect& plugin, int frame ) {
+		host.Fill( 0, frame * 3.0f, 0.0f );
+		plugin.SetTime( frame / 60.0 );
+		ProcessOpenGLStruct pGL = host.Frame();
+		plugin.ProcessOpenGL( &pGL );
+	};
+	for( int frame = 1; frame <= 8; ++frame )
+		frameOf( running, frame );
+
+	// ...keeps moshing when the trial ends mid-show.
+	clock.now += 2 * 86400;
+	rig.service->Pump();
+	CHECK( rig.service->CurrentStatus() == licence::Status::Expired );
+	for( int frame = 9; frame <= 16; ++frame )
+		frameOf( running, frame );
+	CHECK( running.licenceLatch.Held().restriction == licence::Restriction::None );
+	LicensedRun still;
+	still.output = ReadTarget( host.Output() );
+	still.input  = MakeShiftedPattern( FRAME_WIDTH, FRAME_HEIGHT, 16 * 3.0f, 0.0f );
+	CHECK( MeanDifferenceFromInput( still ) > 0.02f );
+	running.DeInitGL();
+
+	// A new one is locked, and says why.
+	const LicensedRun fresh = RunEffect( host, 1.0f );
+	CHECK( fresh.held.restriction == licence::Restriction::Lock );
+	CHECK( MaxDifferenceFromInput( fresh ) <= 1.5f / 255.0f );
+	CHECK( fresh.label == "Licence: locked, trial ended" );
+	host.Teardown();
+}
+
+TEST( ARevokedLicenceLocksNewInstancesOnly )
+{
+	// A refund revokes the licence. The show that is running carries on; the
+	// next effect added is locked and says why.
+	TempFolder  folder;
+	Clock       clock;
+	bool        revoked = false;
+	TestLicence rig( folder.Path(), licence::Policy::Lock, clock, [ & ]( const FakeServer::Request& ) {
+		return revoked ? Respond( 403, "{\"ok\":false,\"reason\":\"revoked\",\"message\":\"Refunded.\"}" )
+		               : Unreachable();
+	} );
+	licence::Store store( folder.Path() );
+	store.WriteToken( LicenceFor( rig, clock ) );
+	store.WriteKey( "LT-DATA-K7M2-9PQR-4XTC" );
+	rig.service->Pump();
+	CHECK( rig.service->CurrentStatus() == licence::Status::Active );
+	ScopedLicence scoped( *rig.service );
+
+	Host host;
+	CHECK( host.Setup( FRAME_WIDTH, FRAME_HEIGHT, 1 ) );
+
+	TestableEffect running;
+	const FFGLViewportStruct viewport = host.Viewport();
+	CHECK( running.InitGL( &viewport ) == FF_SUCCESS );
+	running.SetFloatParameter( running.ParamIndex( "Mosh Amount" ), 1.0f );
+	running.SetFloatParameter( running.ParamIndex( "Motion Threshold" ), 0.0f );
+	auto frameOf = [ & ]( TestableEffect& plugin, int frame ) {
+		host.Fill( 0, frame * 3.0f, 0.0f );
+		plugin.SetTime( frame / 60.0 );
+		ProcessOpenGLStruct pGL = host.Frame();
+		plugin.ProcessOpenGL( &pGL );
+	};
+	for( int frame = 1; frame <= 8; ++frame )
+		frameOf( running, frame );
+
+	// The check-in hears "revoked" mid-show.
+	revoked = true;
+	clock.now += 86400 + 120;
+	rig.service->Pump();
+	CHECK( !store.ReadToken().has_value() );
+	CHECK( store.ReadKey().has_value() );
+	CHECK( rig.service->CurrentGate().restriction == licence::Restriction::Lock );
+
+	for( int frame = 9; frame <= 16; ++frame )
+		frameOf( running, frame );
+	CHECK( running.licenceLatch.Held().restriction == licence::Restriction::None );
+	LicensedRun still;
+	still.output = ReadTarget( host.Output() );
+	still.input  = MakeShiftedPattern( FRAME_WIDTH, FRAME_HEIGHT, 16 * 3.0f, 0.0f );
+	CHECK( MeanDifferenceFromInput( still ) > 0.02f );
+	running.DeInitGL();
+
+	const LicensedRun fresh = RunEffect( host, 1.0f );
+	CHECK( fresh.held.restriction == licence::Restriction::Lock );
+	CHECK( MaxDifferenceFromInput( fresh ) <= 1.5f / 255.0f );
+	CHECK( fresh.label == "Licence: locked, revoked" );
+	host.Teardown();
+}
+
+TEST( LicensingUnlocksAnInstanceAlreadyInTheComposition )
+{
+	TempFolder  folder;
+	Clock       clock;
+	TestLicence rig( folder.Path(), licence::Policy::Lock, clock );
+	rig.service->Pump();
+	ScopedLicence scoped( *rig.service );
+
+	Host host;
+	CHECK( host.Setup( FRAME_WIDTH, FRAME_HEIGHT, 1 ) );
+	TestableEffect plugin;
+	const FFGLViewportStruct viewport = host.Viewport();
+	CHECK( plugin.InitGL( &viewport ) == FF_SUCCESS );
+	plugin.SetFloatParameter( plugin.ParamIndex( "Mosh Amount" ), 1.0f );
+	plugin.SetFloatParameter( plugin.ParamIndex( "Motion Threshold" ), 0.0f );
+
+	int  frame   = 0;
+	auto advance = [ & ]( int count ) {
+		for( int i = 0; i < count; ++i )
+		{
+			++frame;
+			host.Fill( 0, frame * 3.0f, 0.0f );
+			plugin.SetTime( frame / 60.0 );
+			ProcessOpenGLStruct pGL = host.Frame();
+			plugin.ProcessOpenGL( &pGL );
+		}
+		LicensedRun run;
+		run.output = ReadTarget( host.Output() );
+		run.input  = MakeShiftedPattern( FRAME_WIDTH, FRAME_HEIGHT, frame * 3.0f, 0.0f );
+		return run;
+	};
+
+	CHECK( MaxDifferenceFromInput( advance( 4 ) ) <= 1.5f / 255.0f );
+
+	// A key typed into this very instance: the service answers, the worker
+	// stores the token, and the next frames mosh without re-adding the effect.
+	licence::Store( folder.Path() ).WriteToken( LicenceFor( rig, clock ) );
+	rig.service->Pump();
+	CHECK( MeanDifferenceFromInput( advance( 16 ) ) > 0.02f );
+	CHECK( plugin.GetParamDisplayName( plugin.licenceParamIndex ) == "Licence: active" );
+
+	plugin.DeInitGL();
+	host.Teardown();
+}
+
+TEST( TheWatermarkPolicyMarksTheOutputAndNothingElse )
+{
+	// Not the shipping policy, but one line away from it, so it is held to
+	// the same standard: a band across the middle, and every other row exactly
+	// what it would have been.
+	TempFolder  folder;
+	Clock       clock;
+	TestLicence rig( folder.Path(), licence::Policy::Watermark, clock );
+	rig.service->Pump();
+
+	Host host;
+	CHECK( host.Setup( FRAME_WIDTH, FRAME_HEIGHT, 1 ) );
+
+	// Mosh Amount 0, whose output is the input: so "exactly what it would have
+	// been" is the input itself.
+	LicensedRun marked;
+	{
+		ScopedLicence scoped( *rig.service );
+		marked = RunEffect( host, 0.0f );
+	}
+	CHECK( marked.held.restriction == licence::Restriction::Watermark );
+	CHECK( marked.label == "Licence: unlicensed" );
+	CHECK( MaxDifferenceFromInput( marked, 0, BAND_FROM ) <= 1.5f / 255.0f );
+	CHECK( MaxDifferenceFromInput( marked, BAND_TO, FRAME_HEIGHT ) <= 1.5f / 255.0f );
+	CHECK( MeanDifferenceFromInput( marked, BAND_FROM, BAND_TO ) > 0.1f );
+
+	// The text is white on the band: some pixels in it are at full brightness.
+	float brightest = 0.0f;
+	for( int y = BAND_FROM + 2; y < BAND_TO - 3; ++y )
+		for( int x = 0; x < FRAME_WIDTH; ++x )
+			brightest = std::max( brightest, marked.output[ ( static_cast< size_t >( y ) * FRAME_WIDTH + x ) * 4 ] );
+	CHECK( brightest > 0.99f );
+
+	// Under the default service the same run is untouched everywhere.
+	const LicensedRun clean = RunEffect( host, 0.0f );
+	CHECK( MaxDifferenceFromInput( clean ) <= 1.5f / 255.0f );
 	host.Teardown();
 }
 
