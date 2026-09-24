@@ -1,7 +1,7 @@
 cmake_minimum_required( VERSION 3.20 )
 
 project( ffgl-datamosh
-    VERSION 0.3.0
+    VERSION 1.0.0
     DESCRIPTION "Datamosh effects for Resolume"
     # C for Monocypher, the licence code's Ed25519 (external/monocypher).
     LANGUAGES C CXX

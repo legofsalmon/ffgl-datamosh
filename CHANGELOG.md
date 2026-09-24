@@ -6,6 +6,17 @@ Notable changes to ffgl-datamosh. Format follows
 
 ## [Unreleased]
 
+## [1.0.0] — 2026-09-24
+
+The first release sold with a licence, and the first numbered as a release.
+Everything before it was a 0.x pre-release; the number moves from 0.3.0 straight
+to 1.0.0 and nothing else about the numbering changes. The FFGL version fields
+the host reads (`dwPluginMajorVersion` / `dwPluginMinorVersion`) now report 1
+and 0, the description ends `(v1.0.0)`, and the Windows version resource and
+macOS `Info.plist` both say 1.0.0 — all from the one `VERSION` in
+`CMakeLists.txt`, as before. The plugin ids `DMSH` and `DMMX` are unchanged, so
+every saved composition still finds both plugins.
+
 ### Added
 
 - **Licence keys, from letissier.ie.** A new last parameter, **Licence**, on both
@@ -714,7 +725,8 @@ Two defects caught in review before release, both of which fail silently:
   Resolume then silently will not load them; the install notes carry the
   `xattr -dr com.apple.quarantine` fix.
 
-[Unreleased]: https://github.com/legofsalmon/ffgl-datamosh/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/legofsalmon/ffgl-datamosh/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/legofsalmon/ffgl-datamosh/releases/tag/v1.0.0
 [0.3.0]: https://github.com/legofsalmon/ffgl-datamosh/releases/tag/v0.3.0
 [0.2.0]: https://github.com/legofsalmon/ffgl-datamosh/releases/tag/v0.2.0
 [0.1.5]: https://github.com/legofsalmon/ffgl-datamosh/releases/tag/v0.1.5

@@ -185,7 +185,7 @@ does surface — confirmed on a live host. The quickest objective read is:
 curl -sS http://localhost:8080/api/v1/effects | grep -i -A3 -B3 datamosh
 ```
 
-Expect `v0.3.0` (or later) in the output. **No version at all means a pre-0.3.0
+Expect the version you installed (`v1.0.0` or later) in the output. **No version at all means a pre-0.3.0
 binary is loaded** — find and remove the other copy before continuing. Failing
 that, Get Info on the bundle (macOS) or Properties → Details on the DLL
 (Windows) reads the same number from the file itself.

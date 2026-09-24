@@ -95,7 +95,7 @@ tests, verifies the entry point and the macOS architectures, and publishes a
 GitHub Release with the archives attached.
 
 ```sh
-git tag v0.3.0 && git push origin v0.3.0
+git tag v1.0.0 && git push origin v1.0.0
 ```
 
 A release can also be cut from **Actions → release → Run workflow** by entering

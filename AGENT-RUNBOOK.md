@@ -119,8 +119,8 @@ that happens — no notification, no badge, no dialog. Go to triage below.
 
 **This is also the version check.** Confirmed against a live Resolume on
 2026-09-05: the effects list carries the plugin's FFGL *description*, and from
-0.3.0 that description ends with the version, so `v0.3.0` appears in the output
-above. Older builds carry no version anywhere, so its absence means the host has
+0.3.0 that description ends with the version, so the installed version —
+`v1.0.0` for the first release, or later — appears in the output above. Older builds carry no version anywhere, so its absence means the host has
 loaded a pre-0.3.0 binary — which is worth knowing before anything below is
 believed, since a stale copy in a second plugin folder looks identical to a
 fresh one.
