@@ -1284,7 +1284,11 @@ TEST( LumaMaskLocalisesTheMoshAndInvertSwapsIt )
 			params.maskAmount      = maskAmount;
 			params.maskInvert      = invert;
 
-			for( int frame = 0; frame < 12; ++frame )
+			// 36 frames, not 12: the mask scales a hold TIME, so what separates
+			// a dark pixel from a bright one is how long each holds, and a
+			// fifth of a second is too short a look to tell a 2.6s hold from a
+			// 0.65s one.
+			for( int frame = 0; frame < 36; ++frame )
 			{
 				// Bright on the left throughout. Amplitude 0.30 on both sides:
 				// below about that the block matcher stops finding motion at
@@ -1322,9 +1326,6 @@ TEST( LumaMaskLocalisesTheMoshAndInvertSwapsIt )
 	CHECK( flipped.bright < 0.25f * off.bright );
 
 	// Half depth lands between the two, rather than snapping to one of them.
-	// That gradient is the whole reason the mask multiplies the gate instead of
-	// scaling the hold time, where a half-lit pixel and a fully lit one would
-	// both read as simply "held".
 	const Halves half = run( 0.5f, false );
 	CHECK( half.dark > on.dark );
 	CHECK( half.dark < off.dark );
@@ -1339,8 +1340,14 @@ TEST( LumaMaskUsesThisFramesLumaNotLastFrames )
 	// which is every test built on a static split, including the one above.
 	//
 	// So: establish a mosh with the bright half on the left, then push ONE
-	// frame with the split flipped. A mask reading this frame protects the
-	// left; a mask reading last frame still protects the right.
+	// frame with the split flipped. A mask reading this frame starts releasing
+	// the left and lets the right hold; a mask reading last frame does the
+	// mirror image.
+	//
+	// "Starts releasing", because the mask scales a hold time rather than
+	// cutting the hold per frame: one frame of a dark mask lets go of part of
+	// what the left was holding, not all of it. Measured 0.22 left against 0.36
+	// right wired correctly, and 0.52 against 0.23 with Front() bound instead.
 	constexpr int W = 160, H = 128;
 
 	std::vector< float > arm[ 2 ];
@@ -1378,7 +1385,7 @@ TEST( LumaMaskUsesThisFramesLumaNotLastFrames )
 	// The bright half is now on the right, so that is the side still allowed to
 	// hold. Reading last frame's luma gives the mirror image of this.
 	CHECK( right > 0.001f );
-	CHECK( left < 0.5f * right );
+	CHECK( left < 0.8f * right );
 }
 
 TEST( GateIsIndependentOfFrameRate )
@@ -1448,6 +1455,77 @@ TEST( GateIsIndependentOfFrameRate )
 
 	// Measured 0.0005 apart normalised, and 0.108 apart without it.
 	CHECK_NEAR( atThirty, atSixty, 0.02 );
+}
+
+TEST( AMidGreyMaskHoldsPartwayAtAnyFrameRate )
+{
+	// The mask used to be a third factor in the spatial term beside the gate.
+	// That term is a per-frame rate, so a mask of 0.5 halved the hold on every
+	// frame and a mid-grey region lost it all within a few frames — at 30fps
+	// and 60 alike, since the normalisation made the two agree on "nothing".
+	// Only near-white held, so the mask was a hard key rather than the
+	// paintable gradient it was built to be. It now scales the hold TIME.
+	//
+	// Same shape as GateIsIndependentOfFrameRate. Mosh Amount 1 holds for
+	// ever and Decay 0 never bleeds, so the pattern would stay exactly where it
+	// is; a mid-grey frame then arrives, which is also the mask, and the only
+	// thing that can let it in is the mask. Measured against the same run with
+	// Mask Amount 0, which holds everything.
+	const auto heldAfterOneSecond = []( int stepsPerSecond, float maskAmount ) {
+		Rig rig;
+		if( !rig.Setup( FRAME_WIDTH, FRAME_HEIGHT ) )
+			return -1.0f;
+
+		MoshParams params      = RawEstimatorParams();
+		params.moshAmount      = 1.0f;
+		params.decay           = 0.0f;
+		params.motionGain      = 0.0f;
+		params.softness        = 1.0f;
+		params.motionThreshold = 0.0f;
+
+		params.motionSmoothing = 0.0f;
+		float shift            = 0.0f;
+		for( int frame = 0; frame < 8; ++frame )
+		{
+			rig.PushShifted( shift, 0.0f, params, frame );
+			shift += 3.0f;
+		}
+
+		// Field frozen and the gate wide open, so from here the mask is the
+		// only thing deciding how fast the grey gets in.
+		params.motionSmoothing = 1.0f;
+		params.maskAmount      = maskAmount;
+		params.deltaTime       = 1.0f / stepsPerSecond;
+		const std::vector< uint8_t > grey = MakeSolid( FRAME_WIDTH, FRAME_HEIGHT, 128, 128, 128 );
+		for( int step = 0; step < stepsPerSecond; ++step )
+			rig.PushImage( grey, params, 8 + step );
+
+		// How far the picture still is from the grey coming in.
+		const std::vector< float > accum = ReadTarget( rig.pipeline.GetAccumulation() );
+		double total = 0.0;
+		for( size_t index = 0; index < accum.size(); index += 4 )
+			total += std::fabs( accum[ index ] - 128.0f / 255.0f );
+		rig.Teardown();
+		return accum.empty() ? -1.0f : static_cast< float >( total / ( accum.size() / 4 ) );
+	};
+
+	const float heldUnmasked = heldAfterOneSecond( 60, 0.0f );
+	// The control: something to lose, or every ratio below is noise.
+	CHECK( heldUnmasked > 0.05f );
+
+	const float atThirty = heldAfterOneSecond( 30, 1.0f ) / heldUnmasked;
+	const float atSixty  = heldAfterOneSecond( 60, 1.0f ) / heldUnmasked;
+
+	// Grey is a mask of about 0.5, which scales the hold by its square, so a
+	// 4s hold becomes 1s and one second keeps about half the picture (measured
+	// 0.59 at 30fps and 0.58 at 60). The old per-frame factor kept 0.5^60 of
+	// it: zero. Wide bounds, because the claim is "partway", not a third
+	// decimal place.
+	CHECK( atThirty > 0.40f );
+	CHECK( atThirty < 0.75f );
+	CHECK( atSixty > 0.40f );
+	CHECK( atSixty < 0.75f );
+	CHECK_NEAR( atThirty, atSixty, 0.03 );
 }
 
 TEST( QuantiseDoesNotSilenceSlowMotion )

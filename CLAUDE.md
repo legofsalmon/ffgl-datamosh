@@ -11,7 +11,7 @@ field. Windows and macOS.
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build --parallel
-ctest --test-dir build --output-on-failure     # 107 tests, headless EGL + llvmpipe
+ctest --test-dir build --output-on-failure     # 109 tests, headless EGL + llvmpipe
 ./build/tests/datamosh_tests --profile          # per-pass GPU timing
 ```
 
@@ -51,9 +51,9 @@ alone; `BothPluginsSurviveHostInstantiation` replays the host's walk.
 That trap is specific to `SetParamInfo`. `SetParamGroup`, `SetParamDisplayName`,
 `SetParamVisibility` and `SetParamElements` are different: they `FindParamInfo`
 and assign in place, so they cannot append a phantom, and the SDK's own comment
-on visibility says Resolume honours the event. `mixVal` is grouped through the
-first of these. Whether it can be *hidden* waits on one check in the host — that
-it does not special-case a mixer's index 0 as the blend amount.
+on visibility says Resolume honours the event. `mixVal` is grouped and hidden through the
+first two, since nothing reads it (Resolume binds a mixer's blend amount to a
+parameter named `Opacity`, per the SDK's Add example, not to index 0).
 
 **`PluginInfoStruct::PluginName` is `char[16]` and is not null-terminated when
 full**, so a name of 16 characters or more runs into the adjacent `PluginType`.

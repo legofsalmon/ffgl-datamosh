@@ -157,24 +157,24 @@ void main()
 	}
 
 	// One spatial term, normalised once. The gate asks whether this pixel is
-	// moving, the damage asks whether the corruption has reached it, and the
-	// mask asks whether it is allowed to hold at all. All three vary across the
-	// frame, so all three belong in here rather than each inventing its own
-	// frame-rate treatment beside the others. Three normalisations with three
-	// comments is how divergence starts.
+	// moving and the damage asks whether the corruption has reached it. Both
+	// vary across the frame, so both belong in here rather than each inventing
+	// its own frame-rate treatment beside the other.
 	//
-	// The mask multiplies AFTER the max, so it attenuates the creep instead of
-	// carving it. The field stays a property of the footage: moving the mask
-	// does not force it to re-grow, and it can still be shown as its own layer.
+	// Both stay OUTSIDE the hold-time map, for the reason the gate always has.
+	float spatial = max( MoshGate( motionPixels, ThresholdPixels ), damage );
+
+	// The mask asks how long this pixel is allowed to hold, so it scales the
+	// hold TIME: mid-grey holds a quarter as long as fully lit. It is not a third
+	// factor in the spatial term. That term is a per-frame rate, and a mask of
+	// 0.5 in it halved the hold on every frame — gone within a few frames at any
+	// frame rate — which made the mask a hard key on near-white.
 	//
-	// Both stay OUTSIDE the hold-time map for the same reason the gate does.
-	// Folded into the exponent, a half-lit pixel would sit at a 0.45s hold
-	// against a fully lit pixel's 4s — perceptually both "held" — so the mask
-	// would collapse into a hard key and lose every midtone. Out here, mask 0.5
-	// is literally half the cross-fade weight, and that gradient is what makes
-	// it paintable.
-	float spatial     = max( MoshGate( motionPixels, ThresholdPixels ), damage ) * mask;
-	float persistence = clamp( keep * retention * MoshNormaliseSpatial( spatial, DeltaTime ),
+	// It multiplies AFTER the max, so it attenuates the creep instead of carving
+	// it. The field stays a property of the footage: moving the mask does not
+	// force it to re-grow, and it can still be shown as its own layer.
+	float persistence = clamp( keep * retention * MoshNormaliseSpatial( spatial, DeltaTime ) *
+	                               MoshMaskHold( mask, moshLevel, DeltaTime ),
 	                           0.0, 1.0 );
 
 	vec4 result = mix( live, moshed, persistence );

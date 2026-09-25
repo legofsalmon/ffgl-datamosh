@@ -43,14 +43,21 @@ public:
 		DeclareCommonParams();
 
 		// mixVal (index 0) cannot be renamed or removed — see above — but it can
-		// be grouped. SetParamGroup mutates the record in place; it is the same
-		// call AddGrouped makes for every other parameter, so it cannot
-		// reproduce the phantom-parameter bug that SetParamInfo's push_back
-		// does. Hiding it is one more in-place call, but it waits on a check in
-		// Resolume: whether the host special-cases index 0 of a mixer as the
-		// blend amount. Given what happened last time anyone touched this
-		// parameter, that check comes first.
+		// be grouped and hidden. SetParamGroup and SetParamVisibility both
+		// mutate the record in place; neither is SetParamInfo, so neither can
+		// reproduce the phantom-parameter bug that its push_back does, and the
+		// parameter count and every index stay exactly as they were.
+		//
+		// Hidden because nothing reads it: this plugin never has, so it was a
+		// slider in the blend-mode panel that did nothing, and the 1.0 docs had
+		// to tell people to ignore it. Resolume binds a mixer's blend amount by
+		// NAME, to a parameter called "Opacity" (the SDK's own Add mixer says
+		// so, in external/ffgl/source/plugins/Add/Add.cpp), not to index 0. And
+		// even if some host did drive index 0, hiding changes only the panel:
+		// the value still arrives and is still ignored, exactly as before.
+		// MixValueIsInertAndHidden pins both halves of that.
 		this->SetParamGroup( 0, "Mosh" );
+		this->SetParamVisibility( 0, false, false );
 	}
 
 protected:

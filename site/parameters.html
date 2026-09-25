@@ -581,8 +581,10 @@
 						<td class="desc">
 							Depth, not gain. At 0 the mask is exactly off and nothing changes.
 							Turning it up lets bright regions hold pixels while dark ones keep
-							refreshing, with everything in between held proportionally &mdash;
-							it is a gradient, not a key, so a soft edge stays soft.
+							refreshing, with everything in between held for a shorter time
+							&mdash; mid-grey for about a quarter as long as white, the same at
+							any frame rate. It is a gradient, not a key, so a soft edge stays
+							soft.
 						</td>
 					</tr>
 					<tr>
@@ -735,10 +737,10 @@
 
 			<div class="note warn" style="margin-top:22px">
 				<span class="note-label">mixVal does nothing</span>
-				The mixer also shows a slider called <code>mixVal</code>, inherited from
-				the FFGL mixer base class. It is not read &mdash; use <strong>Mix</strong>
-				in the Output group instead. It cannot be renamed or removed without
-				making the plugin fail to load at all;
+				Builds up to 1.0.0 also show a slider called <code>mixVal</code>, inherited
+				from the FFGL mixer base class. It is not read &mdash; use <strong>Mix</strong>
+				in the Output group instead &mdash; and later builds hide it. It cannot be
+				renamed or removed without making the plugin fail to load at all;
 				<a href="architecture.html#paraminfo">the reason is worth reading</a> if you
 				write FFGL plugins yourself.
 			</div>

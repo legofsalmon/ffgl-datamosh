@@ -185,6 +185,41 @@ float MoshHoldSeconds( float moshLevel )
 	return HOLD_MIN_SECONDS * pow( HOLD_MAX_SECONDS / HOLD_MIN_SECONDS, moshLevel );
 }
 
+/// The luma mask as a scale on the hold TIME, by its square: a mid-grey pixel
+/// holds for a quarter as long as a fully lit one, at any frame rate.
+///
+/// It used to be a factor inside the spatial term, beside the gate. That term
+/// is a per-frame rate (see MoshNormaliseSpatial), so a mask of 0.5 halved the
+/// hold on EVERY frame: survival over one second was 0.5^60, the same at 30fps
+/// as at 60 once normalised, and indistinguishable from no hold at all. Only a
+/// mask within a whisker of 1 held anything, so the mask behaved as a hard key
+/// on near-white — the opposite of the paintable gradient it was built for.
+///
+/// Squared rather than linear because linear was too soft at the dark end.
+/// Real footage is rarely black, and a luma of 0.3 (mask 0.22 after the
+/// smoothstep) still held for a fifth of the full time, so the dark half of
+/// LumaMaskLocalisesTheMoshAndInvertSwapsIt kept 86% of its unmasked mosh at
+/// Mask Amount 1. Squared, that pixel holds for 5% and the dark half keeps
+/// 12%, while mid-grey still holds for a quarter and 0.8 for two thirds.
+///
+/// Built as exp2(-dt/T), like MoshHold, so dt cancels over a wall-clock second.
+/// Multiplied by MoshHold's own exp2(-dt/hold) the product is exactly
+/// exp2(-dt / (mask^2 * hold)). At Mosh Amount 1 MoshHold is pinned at exactly
+/// 1 (never refresh), so the scale is taken against the longest hold instead:
+/// a mask still has to paint there, not collapse to "held or not".
+///
+/// Endpoints are exact: mask 1 is the identity, so every composition with Mask
+/// Amount 0 renders unchanged, and mask 0 is an exact refresh, so dark footage
+/// at full Mask Amount still moshes nowhere.
+float MoshMaskHold( float mask, float moshLevel, float deltaTime )
+{
+	if( mask >= 0.999 )
+		return 1.0;
+	if( mask <= 1e-3 )
+		return 0.0;
+	return exp2( -deltaTime * ( 1.0 / ( mask * mask ) - 1.0 ) / MoshHoldSeconds( moshLevel ) );
+}
+
 /// Decay's half-life in seconds, or a very long time when Decay is off. Paired
 /// with MoshHoldSeconds for the same reason.
 float MoshDecaySeconds( float decay )
