@@ -1373,6 +1373,69 @@ TEST( MixerTakesMotionFromTheSelectedInput )
 	CHECK( fromThisLayer > fromBelow * 4.0f );
 }
 
+TEST( MixValueIsInertAndHidden )
+{
+	// ffglqs::Mixer registers "mixVal" at index 0 and nothing here can rename
+	// or remove it. Nothing reads it either, so it was a slider in Resolume's
+	// blend-mode panel that did nothing. Now hidden, in place: still index 0,
+	// still counted, so no saved composition's indices move.
+	{
+		TestableMixer mixer;
+		CHECK( std::strcmp( mixer.GetParamName( 0 ), "mixVal" ) == 0 );
+		CHECK( mixer.GetParamVisibility( 0 ) == 0 );
+		CHECK( mixer.GetNumParams() == mixer.ParamCount() );
+		// Everything else the operator plays is still on show.
+		CHECK( mixer.GetParamVisibility( mixer.ParamIndex( "Mosh Amount" ) ) != 0 );
+	}
+
+	// And hiding it loses nothing, because it is inert: the host writing 0 (its
+	// declared default) or 1 must leave every value the render reads exactly
+	// the same. Compared on one instance through ReadParams, the one place
+	// parameters are derived, because two renders are never bit-identical here
+	// (the frame step is wall-clock). Were mixVal ever wired up, this fails and
+	// the slider has to come back.
+	{
+		TestableMixer mixer;
+		mixer.SetFloatParameter( mixer.ParamIndex( "Mosh Amount" ), 0.6f );
+
+		mixer.SetFloatParameter( 0, 0.0f );
+		const MoshParams atZero = mixer.ReadParams();
+		mixer.SetFloatParameter( 0, 1.0f );
+		CHECK_NEAR( mixer.GetFloatParameter( 0 ), 1.0, 1e-6 );
+		const MoshParams atOne = mixer.ReadParams();
+
+		CHECK( atZero.moshAmount == atOne.moshAmount );
+		CHECK( atZero.mix == atOne.mix );
+		CHECK( atZero.motionGain == atOne.motionGain );
+		CHECK( atZero.motionSmoothing == atOne.motionSmoothing );
+		CHECK( atZero.motionThreshold == atOne.motionThreshold );
+		CHECK( atZero.blockSize == atOne.blockSize );
+		CHECK( atZero.softness == atOne.softness );
+		CHECK( atZero.pelSnap == atOne.pelSnap );
+		CHECK( atZero.decay == atOne.decay );
+		CHECK( atZero.corruption == atOne.corruption );
+		CHECK( atZero.chromaDrift == atOne.chromaDrift );
+		CHECK( atZero.motionLag == atOne.motionLag );
+		CHECK( atZero.blockRepeat == atOne.blockRepeat );
+		CHECK( atZero.motionQuantise == atOne.motionQuantise );
+		CHECK( atZero.spread == atOne.spread );
+		CHECK( atZero.maskAmount == atOne.maskAmount );
+		CHECK( atZero.audioAmount == atOne.audioAmount );
+		CHECK( atZero.sensitivity == atOne.sensitivity );
+		CHECK( atZero.duration == atOne.duration );
+		CHECK( atZero.trigger == atOne.trigger );
+		CHECK( atZero.hold == atOne.hold );
+		CHECK( atZero.reset == atOne.reset );
+		CHECK( atZero.maskInvert == atOne.maskInvert );
+		CHECK( atZero.invertDirection == atOne.invertDirection );
+		CHECK( atZero.autoMode == atOne.autoMode );
+		CHECK( atZero.view == atOne.view );
+		CHECK( atZero.quality == atOne.quality );
+		CHECK( atZero.motionSource == atOne.motionSource );
+		CHECK( atZero.beatDivisor == atOne.beatDivisor );
+	}
+}
+
 TEST( MixerHandlesInputsOfDifferentSizes )
 {
 	Host host;

@@ -134,7 +134,7 @@ powershell -ExecutionPolicy Bypass -File .\tools\collect-datamosh-diagnostics.ps
 The open questions it exists to settle: whether Resolume delivers `SetTime` to
 effects (the frame-advance gate in `src/plugins/DatamoshPlugin.h` assumes it does
 and falls back to advancing every call if not), whether the host sends real
-parameter ranges or normalised 0..1, what it does with the mixer's inherited
+parameter ranges or normalised 0..1, whether it really hides the mixer's inherited
 `mixVal`, and whether every shader survives a stricter GLSL compiler than Mesa's.
 Then `--profile` on real hardware, and tune `SEARCH_LAMBDA`, `SEARCH_ZERO_BIAS`
 and `THRESHOLD_PIXEL_RANGE` (`src/core/MoshPipeline.cpp`) plus the cut-sensitivity

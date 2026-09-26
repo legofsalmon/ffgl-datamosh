@@ -6,6 +6,33 @@ Notable changes to ffgl-datamosh. Format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Mask Amount is a gradient, not a key on near-white.** The mask was a
+  per-frame factor on the hold, and the hold is fed back every frame, so a
+  mid-grey mask halved it on every frame and it was gone in a few: only areas
+  within a whisker of white held anything. It now scales the hold *time*, by
+  its square, so mid-grey holds for about a quarter as long as white, 0.8 for
+  about two thirds, and a luma of 0.3 for a twentieth. Built as `exp2(-dt/T)`
+  like Mosh Amount, so it means the same at 30 fps as at 60. Endpoints are
+  unchanged: Mask Amount 0 renders every composition exactly as before, and
+  genuinely black footage at full Mask Amount still moshes nowhere.
+
+  One visible consequence: when the mask goes dark under a held region, the
+  hold now lets go over a few frames instead of on the next one.
+  `AMidGreyMaskHoldsPartwayAtAnyFrameRate` fails against the old shader.
+
+### Changed
+
+- **Mosh Transplant hides the inherited `mixVal` slider.** Nothing has ever
+  read it, so it was a control in the blend-mode panel that did nothing. It is
+  hidden in place with `SetParamVisibility`, so it is still index 0 and still
+  counted, and every saved composition's indices are unchanged. Resolume binds
+  a mixer's blend amount to a parameter named `Opacity` (the SDK's Add example
+  says so), not to index 0; hiding changes only what the panel shows either
+  way. `MixValueIsInertAndHidden` pins both that it is hidden and that it is
+  inert.
+
 ## [1.0.0] — 2026-09-24
 
 The first release sold with a licence, and the first numbered as a release.

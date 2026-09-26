@@ -506,9 +506,10 @@ and after ours in the chain and confirm neither is disturbed — we must not lea
 blend state, bound FBO, viewport or active texture unit dirty. Then Auto Mode →
 On Cut against footage with real cuts.
 
-**Phase D — the mixer (~20 min).** Inputs of different sizes; what Resolume does
-with the inherited `mixVal` slider; whether the Motion Source labels tell the
-truth.
+**Phase D — the mixer (~20 min).** Inputs of different sizes; that the inherited
+`mixVal` slider no longer shows in the blend-mode panel, and that the layer's own
+opacity still fades the mixer as it does any other blend mode; whether the Motion
+Source labels tell the truth.
 
 **Phase E — aesthetic sweeps (~55 min).** Every parameter, one at a time, with
 the preconditions that make its effect visible. This is where the tuning defaults
